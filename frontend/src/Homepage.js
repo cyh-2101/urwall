@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import './Homepage.css';
+import PostDetail from './PostDetail';
 
-export default function Homepage({ user, onLogout }) {  // Changed from 'homepage' to 'Homepage'
+export default function Homepage({ user, onLogout }) {
   const [posts, setPosts] = useState([]);
   const [showCreatePost, setShowCreatePost] = useState(false);
+  const [selectedPostId, setSelectedPostId] = useState(null);
   const [newPost, setNewPost] = useState({
     title: '',
     content: '',
@@ -63,7 +65,8 @@ export default function Homepage({ user, onLogout }) {  // Changed from 'homepag
     }
   };
 
-  const handleLike = async (postId) => {
+  const handleLike = async (postId, e) => {
+    e.stopPropagation();
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(`http://localhost:5000/api/posts/${postId}/like`, {
@@ -92,6 +95,10 @@ export default function Homepage({ user, onLogout }) {  // Changed from 'homepag
     if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)}d ago`;
     return date.toLocaleDateString();
   };
+
+  if (selectedPostId) {
+    return <PostDetail postId={selectedPostId} onBack={() => setSelectedPostId(null)} user={user} />;
+  }
 
   return (
     <div className="home-container">
@@ -191,7 +198,12 @@ export default function Homepage({ user, onLogout }) {  // Changed from 'homepag
             <div className="no-posts">No posts yet. Be the first to post!</div>
           ) : (
             posts.map((post) => (
-              <div key={post.id} className="post-card">
+              <div 
+                key={post.id} 
+                className="post-card"
+                onClick={() => setSelectedPostId(post.id)}
+                style={{ cursor: 'pointer' }}
+              >
                 <div className="post-header">
                   <div className="post-author">
                     <strong>{post.author}</strong>
@@ -202,7 +214,7 @@ export default function Homepage({ user, onLogout }) {  // Changed from 'homepag
                 <h3 className="post-title">{post.title}</h3>
                 <p className="post-content">{post.content}</p>
                 <div className="post-actions">
-                  <button onClick={() => handleLike(post.id)} className="action-btn">
+                  <button onClick={(e) => handleLike(post.id, e)} className="action-btn">
                     ❤️ {post.likes_count}
                   </button>
                   <button className="action-btn">

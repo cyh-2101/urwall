@@ -64,6 +64,7 @@ async function sendVerificationEmail(email, code) {
   }
 }
 
+
 // Initialize database tables
 async function initializeDatabase() {
   try {
@@ -73,6 +74,8 @@ async function initializeDatabase() {
         username VARCHAR(255) UNIQUE NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
+        avatar_url VARCHAR(500),
+        bio TEXT,
         verified BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -85,6 +88,40 @@ async function initializeDatabase() {
         expires_at TIMESTAMP NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+
+      CREATE TABLE IF NOT EXISTS posts (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        title VARCHAR(500) NOT NULL,
+        content TEXT NOT NULL,
+        category VARCHAR(100) NOT NULL,
+        is_anonymous BOOLEAN DEFAULT FALSE,
+        likes_count INTEGER DEFAULT 0,
+        comments_count INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS comments (
+        id SERIAL PRIMARY KEY,
+        post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        content TEXT NOT NULL,
+        is_anonymous BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS likes (
+        id SERIAL PRIMARY KEY,
+        post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(post_id, user_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_posts_category ON posts(category);
+      CREATE INDEX IF NOT EXISTS idx_comments_post_id ON comments(post_id);
+      CREATE INDEX IF NOT EXISTS idx_likes_post_id ON likes(post_id);
     `);
     console.log('Database tables initialized');
   } catch (error) {
@@ -333,6 +370,225 @@ app.post('/api/auth/reset-password', async (req, res) => {
   }
 });
 
+// Middleware to verify JWT token
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ message: 'Access token required' });
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ message: 'Invalid or expired token' });
+    }
+    req.user = user;
+    next();
+  });
+}
+
+// Create a new post
+app.post('/api/posts', authenticateToken, async (req, res) => {
+  const { title, content, category, isAnonymous } = req.body;
+
+  if (!title || !content || !category) {
+    return res.status(400).json({ message: 'Title, content, and category are required' });
+  }
+
+  try {
+    const result = await pool.query(
+      'INSERT INTO posts (user_id, title, content, category, is_anonymous) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [req.user.id, title, content, category, isAnonymous || false]
+    );
+
+    res.status(201).json({
+      message: 'Post created successfully',
+      post: result.rows[0],
+    });
+  } catch (error) {
+    console.error('Error creating post:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Get all posts (with pagination and sorting)
+app.get('/api/posts', async (req, res) => {
+  const { page = 1, limit = 20, sortBy = 'created_at', category } = req.query;
+  const offset = (page - 1) * limit;
+
+  try {
+    let query = `
+      SELECT 
+        p.id, 
+        p.title, 
+        p.content, 
+        p.category, 
+        p.is_anonymous,
+        p.likes_count,
+        p.comments_count,
+        p.created_at,
+        CASE WHEN p.is_anonymous THEN 'Anonymous' ELSE u.username END as author
+      FROM posts p
+      LEFT JOIN users u ON p.user_id = u.id
+    `;
+
+    const params = [];
+    if (category) {
+      query += ' WHERE p.category = $1';
+      params.push(category);
+    }
+
+    // Sorting
+    if (sortBy === 'likes') {
+      query += ' ORDER BY p.likes_count DESC, p.created_at DESC';
+    } else if (sortBy === 'comments') {
+      query += ' ORDER BY p.comments_count DESC, p.created_at DESC';
+    } else {
+      query += ' ORDER BY p.created_at DESC';
+    }
+
+    query += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(limit, offset);
+
+    const result = await pool.query(query, params);
+
+    // Get total count
+    let countQuery = 'SELECT COUNT(*) FROM posts';
+    const countParams = [];
+    if (category) {
+      countQuery += ' WHERE category = $1';
+      countParams.push(category);
+    }
+    const countResult = await pool.query(countQuery, countParams);
+
+    res.json({
+      posts: result.rows,
+      total: parseInt(countResult.rows[0].count),
+      page: parseInt(page),
+      totalPages: Math.ceil(countResult.rows[0].count / limit),
+    });
+  } catch (error) {
+    console.error('Error fetching posts:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Get a single post by ID
+app.get('/api/posts/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(
+      `SELECT 
+        p.id, 
+        p.title, 
+        p.content, 
+        p.category, 
+        p.is_anonymous,
+        p.likes_count,
+        p.comments_count,
+        p.created_at,
+        CASE WHEN p.is_anonymous THEN 'Anonymous' ELSE u.username END as author,
+        CASE WHEN p.is_anonymous THEN NULL ELSE u.avatar_url END as author_avatar
+      FROM posts p
+      LEFT JOIN users u ON p.user_id = u.id
+      WHERE p.id = $1`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error fetching post:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Like a post
+app.post('/api/posts/:id/like', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Check if already liked
+    const existingLike = await pool.query(
+      'SELECT * FROM likes WHERE post_id = $1 AND user_id = $2',
+      [id, req.user.id]
+    );
+
+    if (existingLike.rows.length > 0) {
+      // Unlike
+      await pool.query('DELETE FROM likes WHERE post_id = $1 AND user_id = $2', [id, req.user.id]);
+      await pool.query('UPDATE posts SET likes_count = likes_count - 1 WHERE id = $1', [id]);
+      res.json({ message: 'Post unliked', liked: false });
+    } else {
+      // Like
+      await pool.query('INSERT INTO likes (post_id, user_id) VALUES ($1, $2)', [id, req.user.id]);
+      await pool.query('UPDATE posts SET likes_count = likes_count + 1 WHERE id = $1', [id]);
+      res.json({ message: 'Post liked', liked: true });
+    }
+  } catch (error) {
+    console.error('Error liking post:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Add a comment to a post
+app.post('/api/posts/:id/comments', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { content, isAnonymous } = req.body;
+
+  if (!content) {
+    return res.status(400).json({ message: 'Content is required' });
+  }
+
+  try {
+    const result = await pool.query(
+      'INSERT INTO comments (post_id, user_id, content, is_anonymous) VALUES ($1, $2, $3, $4) RETURNING *',
+      [id, req.user.id, content, isAnonymous || false]
+    );
+
+    await pool.query('UPDATE posts SET comments_count = comments_count + 1 WHERE id = $1', [id]);
+
+    res.status(201).json({
+      message: 'Comment added successfully',
+      comment: result.rows[0],
+    });
+  } catch (error) {
+    console.error('Error adding comment:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Get comments for a post
+app.get('/api/posts/:id/comments', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(
+      `SELECT 
+        c.id,
+        c.content,
+        c.is_anonymous,
+        c.created_at,
+        CASE WHEN c.is_anonymous THEN 'Anonymous' ELSE u.username END as author,
+        CASE WHEN c.is_anonymous THEN NULL ELSE u.avatar_url END as author_avatar
+      FROM comments c
+      LEFT JOIN users u ON c.user_id = u.id
+      WHERE c.post_id = $1
+      ORDER BY c.created_at ASC`,
+      [id]
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching comments:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
 // Test endpoint
 app.get('/api/test', (req, res) => {
   res.json({ message: 'Backend is working!' });

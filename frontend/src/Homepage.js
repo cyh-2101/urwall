@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import './homepage.css';
+import './Homepage.css';
 
 export default function Homepage({ user, onLogout }) {  // Changed from 'homepage' to 'Homepage'
   const [posts, setPosts] = useState([]);

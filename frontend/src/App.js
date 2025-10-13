@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './Auth.css';
+import Homepage from './Homepage';
 
 export default function Auth() {
+  const [user, setUser] = useState(null);
   const [activeTab, setActiveTab] = useState('login');
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -22,6 +24,14 @@ export default function Auth() {
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('');
 
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    const storedUser = localStorage.getItem('user');
+    if (token && storedUser) {
+      setUser(JSON.parse(storedUser));
+    }
+  }, []);
+
   const showMessage = (text, type) => {
     setMessage(text);
     setMessageType(type);
@@ -39,6 +49,9 @@ export default function Auth() {
       const data = await response.json();
       if (response.ok) {
         showMessage('Login successful!', 'success');
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        setUser(data.user);
         setLoginEmail('');
         setLoginPassword('');
       } else {
@@ -181,6 +194,16 @@ export default function Auth() {
       showMessage('Network error', 'error');
     }
   };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setUser(null);
+  };
+
+  if (user) {
+    return <Homepage user={user} onLogout={handleLogout} />;
+  }
 
   const renderInput = (label, type, value, onChange, placeholder, props = {}) => (
     <div className="auth-form-group">

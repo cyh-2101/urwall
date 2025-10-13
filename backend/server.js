@@ -1,4 +1,3 @@
-
 require('dotenv').config();
 console.log('========== ENV VARIABLES ==========');
 console.log('DB_NAME:', process.env.DB_NAME);
@@ -64,22 +63,49 @@ async function sendVerificationEmail(email, code) {
   }
 }
 
-
-// Initialize database tables
+// Initialize database tables with migration support
 async function initializeDatabase() {
   try {
+    // Create tables if they don't exist
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         username VARCHAR(255) UNIQUE NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
-        avatar_url VARCHAR(500),
-        bio TEXT,
         verified BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+    `);
 
+    // Check if avatar_url column exists and add it if it doesn't
+    const checkAvatarColumn = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='users' AND column_name='avatar_url'
+    `);
+    
+    if (checkAvatarColumn.rows.length === 0) {
+      console.log('Adding avatar_url column to users table...');
+      await pool.query('ALTER TABLE users ADD COLUMN avatar_url VARCHAR(500)');
+      console.log('avatar_url column added successfully');
+    }
+
+    // Check if bio column exists and add it if it doesn't
+    const checkBioColumn = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='users' AND column_name='bio'
+    `);
+    
+    if (checkBioColumn.rows.length === 0) {
+      console.log('Adding bio column to users table...');
+      await pool.query('ALTER TABLE users ADD COLUMN bio TEXT');
+      console.log('bio column added successfully');
+    }
+
+    // Create other tables
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS verification_codes (
         id SERIAL PRIMARY KEY,
         email VARCHAR(255) NOT NULL,
@@ -170,42 +196,19 @@ app.post('/api/auth/send-verification', async (req, res) => {
     const code = generateVerificationCode();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
+    // Store verification code
     await pool.query(
       'INSERT INTO verification_codes (email, code, type, expires_at) VALUES ($1, $2, $3, $4)',
       [email, code, type, expiresAt]
     );
 
+    // Send email
     await sendVerificationEmail(email, code);
 
-    res.json({ message: 'Verification code sent' });
+    res.json({ message: 'Verification code sent to your email' });
   } catch (error) {
     console.error('Error:', error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-});
-
-// Verify code
-app.post('/api/auth/verify-code', async (req, res) => {
-  const { email, code } = req.body;
-
-  if (!email || !code) {
-    return res.status(400).json({ message: 'Email and code are required' });
-  }
-
-  try {
-    const result = await pool.query(
-      'SELECT * FROM verification_codes WHERE email = $1 AND code = $2 AND expires_at > NOW() ORDER BY created_at DESC LIMIT 1',
-      [email, code]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(400).json({ message: 'Invalid or expired code' });
-    }
-
-    res.json({ message: 'Code verified' });
-  } catch (error) {
-    console.error('Error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Failed to send verification code' });
   }
 });
 
@@ -215,10 +218,6 @@ app.post('/api/auth/register', async (req, res) => {
 
   if (!username || !email || !password || !verificationCode) {
     return res.status(400).json({ message: 'All fields are required' });
-  }
-
-  if (!email.endsWith('@illinois.edu')) {
-    return res.status(400).json({ message: 'Email must be @illinois.edu' });
   }
 
   if (password.length < 6) {
@@ -236,20 +235,19 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ message: 'Invalid or expired verification code' });
     }
 
-    // Check if email already exists
-    const existingUser = await pool.query(
-      'SELECT * FROM users WHERE email = $1',
-      [email]
+    // Check if username already exists
+    const existingUsername = await pool.query(
+      'SELECT * FROM users WHERE username = $1',
+      [username]
     );
-
-    if (existingUser.rows.length > 0) {
-      return res.status(400).json({ message: 'Email already registered' });
+    if (existingUsername.rows.length > 0) {
+      return res.status(400).json({ message: 'Username already taken' });
     }
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Insert user
+    // Create user
     await pool.query(
       'INSERT INTO users (username, email, password, verified) VALUES ($1, $2, $3, $4)',
       [username, email, hashedPassword, true]
@@ -479,6 +477,7 @@ app.get('/api/posts/:id', async (req, res) => {
   const { id } = req.params;
 
   try {
+    // Fixed query - removed u.avatar_url reference or handle it gracefully
     const result = await pool.query(
       `SELECT 
         p.id, 
@@ -489,8 +488,8 @@ app.get('/api/posts/:id', async (req, res) => {
         p.likes_count,
         p.comments_count,
         p.created_at,
-        CASE WHEN p.is_anonymous THEN 'Anonymous' ELSE u.username END as author,
-        CASE WHEN p.is_anonymous THEN NULL ELSE u.avatar_url END as author_avatar
+        p.user_id,
+        CASE WHEN p.is_anonymous THEN 'Anonymous' ELSE u.username END as author
       FROM posts p
       LEFT JOIN users u ON p.user_id = u.id
       WHERE p.id = $1`,
@@ -501,7 +500,27 @@ app.get('/api/posts/:id', async (req, res) => {
       return res.status(404).json({ message: 'Post not found' });
     }
 
-    res.json(result.rows[0]);
+    // If not anonymous and avatar_url column exists, get it
+    let postData = result.rows[0];
+    if (!postData.is_anonymous && postData.user_id) {
+      try {
+        const userResult = await pool.query(
+          'SELECT avatar_url FROM users WHERE id = $1',
+          [postData.user_id]
+        );
+        if (userResult.rows.length > 0) {
+          postData.author_avatar = userResult.rows[0].avatar_url;
+        }
+      } catch (err) {
+        // Avatar column might not exist, ignore error
+        console.log('Avatar column not available');
+      }
+    }
+
+    // Remove user_id from response
+    delete postData.user_id;
+
+    res.json(postData);
   } catch (error) {
     console.error('Error fetching post:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -574,8 +593,8 @@ app.get('/api/posts/:id/comments', async (req, res) => {
         c.content,
         c.is_anonymous,
         c.created_at,
-        CASE WHEN c.is_anonymous THEN 'Anonymous' ELSE u.username END as author,
-        CASE WHEN c.is_anonymous THEN NULL ELSE u.avatar_url END as author_avatar
+        c.user_id,
+        CASE WHEN c.is_anonymous THEN 'Anonymous' ELSE u.username END as author
       FROM comments c
       LEFT JOIN users u ON c.user_id = u.id
       WHERE c.post_id = $1
@@ -583,12 +602,33 @@ app.get('/api/posts/:id/comments', async (req, res) => {
       [id]
     );
 
-    res.json(result.rows);
+    // Add avatar_url if available and not anonymous
+    const commentsWithAvatars = await Promise.all(result.rows.map(async (comment) => {
+      let commentData = { ...comment };
+      if (!comment.is_anonymous && comment.user_id) {
+        try {
+          const userResult = await pool.query(
+            'SELECT avatar_url FROM users WHERE id = $1',
+            [comment.user_id]
+          );
+          if (userResult.rows.length > 0) {
+            commentData.author_avatar = userResult.rows[0].avatar_url;
+          }
+        } catch (err) {
+          // Avatar column might not exist, ignore error
+        }
+      }
+      delete commentData.user_id;
+      return commentData;
+    }));
+
+    res.json(commentsWithAvatars);
   } catch (error) {
     console.error('Error fetching comments:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 });
+
 // Test endpoint
 app.get('/api/test', (req, res) => {
   res.json({ message: 'Backend is working!' });

@@ -34,11 +34,13 @@ const pool = new Pool({
 // Email 配置
 // ============================================
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.sendgrid.net',
+  port: 587,
+  secure: false,
   auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD,
-  },
+    user: 'apikey',  // 固定写 'apikey'
+    pass: process.env.SENDGRID_API_KEY
+  }
 });
 
 // ============================================
@@ -50,14 +52,13 @@ function generateVerificationCode() {
 
 async function sendVerificationEmail(email, code) {
   const mailOptions = {
-    from: process.env.EMAIL_USER,
+from: 'noreply@urwall.com',  
     to: email,
     subject: 'Campus Wall - Verification Code',
     html: `
       <h2>Campus Wall Verification</h2>
       <p>Your verification code is: <strong>${code}</strong></p>
       <p>This code will expire in 10 minutes.</p>
-      <p>If you did not request this, please ignore this email.</p>
     `,
   };
 

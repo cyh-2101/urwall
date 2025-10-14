@@ -98,7 +98,7 @@ export default function UsefulPosts({ user, onPostClick, onBack }) {
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(
-        `http://localhost:5000/api/posts/${selectedPostForTransfer}/request-transfer`,
+        `https://urwall-production.up.railway.app/api/posts/${selectedPostForTransfer}/request-transfer`,
         {
           method: 'POST',
           headers: {

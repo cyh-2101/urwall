@@ -20,7 +20,7 @@ export default function ManagerPanel({ user, onBack }) {
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(
-        `http://localhost:5000/api/manager/all-posts?page=${page}&limit=20`,
+        `https://urwall-production.up.railway.app/api/manager/all-posts?page=${page}&limit=20`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -48,7 +48,7 @@ export default function ManagerPanel({ user, onBack }) {
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(
-        'http://localhost:5000/api/manager/transfer-requests?status=pending',
+        'https://urwall-production.up.railway.app/api/manager/transfer-requests?status=pending',
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -73,7 +73,7 @@ export default function ManagerPanel({ user, onBack }) {
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(
-        `http://localhost:5000/api/manager/posts/${postId}`,
+        `https://urwall-production.up.railway.app/api/manager/posts/${postId}`,
         {
           method: 'DELETE',
           headers: {
@@ -101,7 +101,7 @@ export default function ManagerPanel({ user, onBack }) {
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(
-        `http://localhost:5000/api/manager/transfer-requests/${requestId}/approve`,
+        `http://https://urwall-production.up.railway.app/api/manager/transfer-requests/${requestId}/approve`,
         {
           method: 'POST',
           headers: {
@@ -128,7 +128,7 @@ export default function ManagerPanel({ user, onBack }) {
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(
-        `http://localhost:5000/api/manager/transfer-requests/${requestId}/reject`,
+        `http://https://urwall-production.up.railway.app/api/manager/transfer-requests/${requestId}/reject`,
         {
           method: 'POST',
           headers: {

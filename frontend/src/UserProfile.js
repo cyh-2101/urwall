@@ -49,7 +49,7 @@ const fetchUserPosts = async () => {
       headers['Authorization'] = `Bearer ${token}`;
     }
     
-    const response = await fetch(`http://localhost:5000/api/users/${userId}/posts`, {
+    const response = await fetch(`https://urwall-production.up.railway.app/api/users/${userId}/posts`, {
       headers: headers
     });
     
@@ -66,7 +66,7 @@ const fetchUserPosts = async () => {
     e.preventDefault();
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/users/${userId}`, {
+      const response = await fetch(`https://urwall-production.up.railway.app/api/users/${userId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

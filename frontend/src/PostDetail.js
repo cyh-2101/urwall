@@ -39,7 +39,7 @@ export default function PostDetail({ postId, onBack, user }) {
 
   const fetchPostDetail = async () => {
     try {
-      const response = await fetch(`http://localhost:5000/api/posts/${postId}`);
+      const response = await fetch(`https://urwall-production.up.railway.app/api/posts/${postId}`);
       
       if (!response.ok) {
         const errorData = await response.json();
@@ -62,7 +62,7 @@ export default function PostDetail({ postId, onBack, user }) {
 
   const fetchComments = async () => {
     try {
-      const response = await fetch(`http://localhost:5000/api/posts/${postId}/comments`);
+      const response = await fetch(`https://urwall-production.up.railway.app/api/posts/${postId}/comments`);
       if (!response.ok) {
         console.error('Failed to fetch comments');
         return;
@@ -82,7 +82,7 @@ export default function PostDetail({ postId, onBack, user }) {
         return;
       }
 
-      const response = await fetch(`http://localhost:5000/api/posts/${postId}/like`, {
+      const response = await fetch(`https://urwall-production.up.railway.app/api/posts/${postId}/like`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -127,7 +127,7 @@ export default function PostDetail({ postId, onBack, user }) {
         return;
       }
 
-      const response = await fetch(`http://localhost:5000/api/comments/${commentId}`, {
+      const response = await fetch(`https://urwall-production.up.railway.app/api/comments/${commentId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -178,7 +178,7 @@ export default function PostDetail({ postId, onBack, user }) {
         return;
       }
 
-      const response = await fetch(`http://localhost:5000/api/posts/${postId}/comments`, {
+      const response = await fetch(`https://urwall-production.up.railway.app/api/posts/${postId}/comments`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

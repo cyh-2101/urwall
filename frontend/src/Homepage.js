@@ -51,7 +51,7 @@ useEffect(() => {
       const token = localStorage.getItem('token');
       if (!token) return;
       
-      const response = await fetch('http://localhost:5000/api/auth/check-manager', {
+      const response = await fetch('https://urwall-production.up.railway.app/api/auth/check-manager', {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -72,13 +72,13 @@ const fetchPosts = async () => {
     let url;
     if (searchQuery.trim()) {
       // Use search endpoint if there's a search query
-      url = `http://localhost:5000/api/posts/search?query=${encodeURIComponent(searchQuery)}&sortBy=${sortBy}`;
+      url = `https://urwall-production.up.railway.app/api/posts/search?query=${encodeURIComponent(searchQuery)}&sortBy=${sortBy}`;
       if (selectedCategory) {
         url += `&category=${selectedCategory}`;
       }
     } else {
       // Use regular endpoint if no search query
-      url = `http://localhost:5000/api/posts?sortBy=${sortBy}`;
+      url = `https://urwall-production.up.railway.app/api/posts?sortBy=${sortBy}`;
       if (selectedCategory) {
         url += `&category=${selectedCategory}`;
       }
@@ -98,7 +98,7 @@ const fetchPosts = async () => {
     e.preventDefault();
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/posts', {
+      const response = await fetch('https://urwall-production.up.railway.app/api/posts', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -124,7 +124,7 @@ const fetchPosts = async () => {
     e.stopPropagation();
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/posts/${postId}/like`, {
+      const response = await fetch(`https://urwall-production.up.railway.app/api/posts/${postId}/like`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

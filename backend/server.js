@@ -89,6 +89,14 @@ console.log('DB_PASSWORD:', process.env.DB_PASSWORD ? '***exists***' : 'MISSING'
 console.log('===================================');
 const express = require('express');
 const cors = require('cors');
+const { Pool } = require('pg');
+
+
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
+
+const app = express();
 app.use(cors({
   origin: [
     'http://localhost:3000',
@@ -96,24 +104,24 @@ app.use(cors({
   ],
   credentials: true
 }));
-const { Pool } = require('pg');
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-const nodemailer = require('nodemailer');
-
-const app = express();
-
 // Middleware
-app.use(cors());
+
 app.use(express.json());
 
 // Database connection
 const pool = new Pool({
-  host: process.env.DB_HOST,
-  port: process.env.DB_PORT,
-  database: process.env.DB_NAME,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
+
+// 测试数据库连接
+pool.connect((err, client, release) => {
+  if (err) {
+    console.error('❌ 数据库连接失败:', err.stack);
+  } else {
+    console.log('✅ 数据库连接成功！');
+    release();
+  }
 });
 
 // Email transporter

@@ -12,6 +12,7 @@ export default function Homepage({ user, onLogout }) {
   const [selectedPostId, setSelectedPostId] = useState(null);
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // New post form state
   const [newPost, setNewPost] = useState({
@@ -36,9 +37,9 @@ export default function Homepage({ user, onLogout }) {
   const categories = ['General', 'Housing', 'Course', 'Events', 'Buy/Sell', 'Jobs', 'Other'];
 
   // Fetch posts when sort or category changes
-  useEffect(() => {
-    fetchPosts();
-  }, [sortBy, selectedCategory]);
+useEffect(() => {
+  fetchPosts();
+}, [sortBy, selectedCategory, searchQuery]);
 
   // Check if user is a manager
   useEffect(() => {
@@ -65,22 +66,33 @@ export default function Homepage({ user, onLogout }) {
     }
   };
 
-  const fetchPosts = async () => {
-    setLoading(true);
-    try {
-      let url = `http://localhost:5000/api/posts?sortBy=${sortBy}`;
+const fetchPosts = async () => {
+  setLoading(true);
+  try {
+    let url;
+    if (searchQuery.trim()) {
+      // Use search endpoint if there's a search query
+      url = `http://localhost:5000/api/posts/search?query=${encodeURIComponent(searchQuery)}&sortBy=${sortBy}`;
       if (selectedCategory) {
         url += `&category=${selectedCategory}`;
       }
-      const response = await fetch(url);
-      const data = await response.json();
-      setPosts(data.posts);
-    } catch (error) {
-      console.error('Error fetching posts:', error);
-    } finally {
-      setLoading(false);
+    } else {
+      // Use regular endpoint if no search query
+      url = `http://localhost:5000/api/posts?sortBy=${sortBy}`;
+      if (selectedCategory) {
+        url += `&category=${selectedCategory}`;
+      }
     }
-  };
+    
+    const response = await fetch(url);
+    const data = await response.json();
+    setPosts(data.posts);
+  } catch (error) {
+    console.error('Error fetching posts:', error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleCreatePost = async (e) => {
     e.preventDefault();
@@ -228,7 +240,27 @@ export default function Homepage({ user, onLogout }) {
           <button className="create-post-btn" onClick={() => setShowCreatePost(true)}>
             + New Post
           </button>
-
+          <div className="filter-section">
+            <h3>Search</h3>
+            <div className="search-box">
+              <input
+                type="text"
+                placeholder="Search posts..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="search-input"
+              />
+              {searchQuery && (
+                <button 
+                  onClick={() => setSearchQuery('')} 
+                  className="clear-search-btn"
+                  title="Clear search"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          </div>
           <div className="filter-section">
             <h3>Sort By</h3>
             <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>

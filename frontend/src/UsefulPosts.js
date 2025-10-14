@@ -13,17 +13,26 @@ export default function UsefulPosts({ user, onPostClick, onBack }) {
   const [userPosts, setUserPosts] = useState([]);
   const [selectedPostForTransfer, setSelectedPostForTransfer] = useState(null);
   const [loadingUserPosts, setLoadingUserPosts] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     fetchUsefulPosts();
-  }, [page, sortBy]);
+  }, [page, sortBy, searchQuery]);
 
   const fetchUsefulPosts = async () => {
     try {
       setLoading(true);
-      const response = await fetch(
-        `http://localhost:5000/api/useful-posts?page=${page}&limit=20&sortBy=${sortBy}`
-      );
+      let url;
+      
+      if (searchQuery.trim()) {
+        // Use search endpoint if there's a search query
+        url = `http://localhost:5000/api/useful-posts/search?query=${encodeURIComponent(searchQuery)}&page=${page}&limit=20&sortBy=${sortBy}`;
+      } else {
+        // Use regular endpoint if no search query
+        url = `http://localhost:5000/api/useful-posts?page=${page}&limit=20&sortBy=${sortBy}`;
+      }
+      
+      const response = await fetch(url);
       
       if (response.ok) {
         const data = await response.json();
@@ -169,25 +178,52 @@ export default function UsefulPosts({ user, onPostClick, onBack }) {
       </div>
 
       <div className="useful-posts-controls">
-        <div className="sort-buttons">
-          <button
-            onClick={() => handleSortChange('created_at')}
-            className={`sort-btn ${sortBy === 'created_at' ? 'active' : ''}`}
-          >
-            Latest
-          </button>
-          <button
-            onClick={() => handleSortChange('likes')}
-            className={`sort-btn ${sortBy === 'likes' ? 'active' : ''}`}
-          >
-            Most Liked
-          </button>
-          <button
-            onClick={() => handleSortChange('comments')}
-            className={`sort-btn ${sortBy === 'comments' ? 'active' : ''}`}
-          >
-            Most Discussed
-          </button>
+        <div className="search-and-sort">
+          <div className="search-box-useful">
+            <input
+              type="text"
+              placeholder="Search useful posts..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setPage(1); // Reset to page 1 when searching
+              }}
+              className="search-input-useful"
+            />
+            {searchQuery && (
+              <button 
+                onClick={() => {
+                  setSearchQuery('');
+                  setPage(1);
+                }} 
+                className="clear-search-btn-useful"
+                title="Clear search"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          
+          <div className="sort-buttons">
+            <button
+              onClick={() => handleSortChange('created_at')}
+              className={`sort-btn ${sortBy === 'created_at' ? 'active' : ''}`}
+            >
+              Latest
+            </button>
+            <button
+              onClick={() => handleSortChange('likes')}
+              className={`sort-btn ${sortBy === 'likes' ? 'active' : ''}`}
+            >
+              Most Liked
+            </button>
+            <button
+              onClick={() => handleSortChange('comments')}
+              className={`sort-btn ${sortBy === 'comments' ? 'active' : ''}`}
+            >
+              Most Discussed
+            </button>
+          </div>
         </div>
       </div>
 

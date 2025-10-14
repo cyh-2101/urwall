@@ -524,6 +524,107 @@ app.get('/api/posts', async (req, res) => {
     res.status(500).json({ message: 'Internal server error' });
   }
 });
+// Search posts
+app.get('/api/posts/search', async (req, res) => {
+  const { query, page = 1, limit = 20, sortBy = 'relevance', category } = req.query;
+  const offset = (page - 1) * limit;
+
+  if (!query || query.trim() === '') {
+    return res.status(400).json({ message: 'Search query is required' });
+  }
+
+  try {
+    const searchTerm = `%${query.toLowerCase()}%`;
+    
+    let sqlQuery = `
+      SELECT DISTINCT
+        p.id, 
+        p.title, 
+        p.content, 
+        p.category, 
+        p.is_anonymous,
+        p.likes_count,
+        p.comments_count,
+        p.created_at,
+        CASE WHEN p.is_anonymous THEN 'Anonymous' ELSE u.username END as author,
+        (
+          CASE WHEN LOWER(p.title) LIKE $1 THEN 3 ELSE 0 END +
+          CASE WHEN LOWER(p.content) LIKE $1 THEN 2 ELSE 0 END +
+          CASE WHEN EXISTS (
+            SELECT 1 FROM comments c 
+            WHERE c.post_id = p.id AND LOWER(c.content) LIKE $1
+          ) THEN 1 ELSE 0 END
+        ) as relevance_score
+      FROM posts p
+      LEFT JOIN users u ON p.user_id = u.id
+      LEFT JOIN comments c ON p.id = c.post_id
+      WHERE (
+        LOWER(p.title) LIKE $1 OR 
+        LOWER(p.content) LIKE $1 OR 
+        EXISTS (
+          SELECT 1 FROM comments c2 
+          WHERE c2.post_id = p.id AND LOWER(c2.content) LIKE $1
+        )
+      )
+    `;
+
+    const params = [searchTerm];
+    
+    if (category) {
+      sqlQuery += ` AND p.category = $${params.length + 1}`;
+      params.push(category);
+    }
+
+    // Sorting
+    if (sortBy === 'relevance') {
+      sqlQuery += ' ORDER BY relevance_score DESC, p.created_at DESC';
+    } else if (sortBy === 'likes') {
+      sqlQuery += ' ORDER BY p.likes_count DESC, p.created_at DESC';
+    } else if (sortBy === 'comments') {
+      sqlQuery += ' ORDER BY p.comments_count DESC, p.created_at DESC';
+    } else {
+      sqlQuery += ' ORDER BY p.created_at DESC';
+    }
+
+    sqlQuery += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(limit, offset);
+
+    const result = await pool.query(sqlQuery, params);
+
+    // Get total count
+    let countQuery = `
+      SELECT COUNT(DISTINCT p.id) 
+      FROM posts p
+      LEFT JOIN comments c ON p.id = c.post_id
+      WHERE (
+        LOWER(p.title) LIKE $1 OR 
+        LOWER(p.content) LIKE $1 OR 
+        EXISTS (
+          SELECT 1 FROM comments c2 
+          WHERE c2.post_id = p.id AND LOWER(c2.content) LIKE $1
+        )
+      )
+    `;
+    const countParams = [searchTerm];
+    
+    if (category) {
+      countQuery += ` AND p.category = $2`;
+      countParams.push(category);
+    }
+    
+    const countResult = await pool.query(countQuery, countParams);
+
+    res.json({
+      posts: result.rows,
+      total: parseInt(countResult.rows[0].count),
+      page: parseInt(page),
+      totalPages: Math.ceil(countResult.rows[0].count / limit),
+    });
+  } catch (error) {
+    console.error('Error searching posts:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
 
 // Get a single post by ID
 app.get('/api/posts/:id', async (req, res) => {
@@ -574,6 +675,8 @@ app.get('/api/posts/:id', async (req, res) => {
     res.status(500).json({ message: 'Internal server error' });
   }
 });
+
+
 
 // Like a post
 app.post('/api/posts/:id/like', authenticateToken, async (req, res) => {
@@ -627,7 +730,6 @@ app.post('/api/posts/:id/comments', authenticateToken, async (req, res) => {
   }
 });
 
-// Add this route to your backend/server.js file, after the "Get comments for a post" route
 
 // Delete a comment (only by comment author)
 app.delete('/api/comments/:id', authenticateToken, async (req, res) => {
@@ -937,6 +1039,96 @@ app.get('/api/useful-posts', async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching useful posts:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Search useful posts
+app.get('/api/useful-posts/search', async (req, res) => {
+  const { query, page = 1, limit = 20, sortBy = 'relevance' } = req.query;
+  const offset = (page - 1) * limit;
+
+  if (!query || query.trim() === '') {
+    return res.status(400).json({ message: 'Search query is required' });
+  }
+
+  try {
+    const searchTerm = `%${query.toLowerCase()}%`;
+    
+    let sqlQuery = `
+      SELECT DISTINCT
+        p.id, 
+        p.title, 
+        p.content, 
+        p.category, 
+        p.is_anonymous,
+        p.likes_count,
+        p.comments_count,
+        p.created_at,
+        up.approved_at,
+        CASE WHEN p.is_anonymous THEN 'Anonymous' ELSE u.username END as author,
+        (
+          CASE WHEN LOWER(p.title) LIKE $1 THEN 3 ELSE 0 END +
+          CASE WHEN LOWER(p.content) LIKE $1 THEN 2 ELSE 0 END +
+          CASE WHEN EXISTS (
+            SELECT 1 FROM comments c 
+            WHERE c.post_id = p.id AND LOWER(c.content) LIKE $1
+          ) THEN 1 ELSE 0 END
+        ) as relevance_score
+      FROM useful_posts up
+      JOIN posts p ON up.post_id = p.id
+      LEFT JOIN users u ON p.user_id = u.id
+      LEFT JOIN comments c ON p.id = c.post_id
+      WHERE (
+        LOWER(p.title) LIKE $1 OR 
+        LOWER(p.content) LIKE $1 OR 
+        EXISTS (
+          SELECT 1 FROM comments c2 
+          WHERE c2.post_id = p.id AND LOWER(c2.content) LIKE $1
+        )
+      )
+    `;
+
+    // Sorting
+    if (sortBy === 'relevance') {
+      sqlQuery += ' ORDER BY relevance_score DESC, up.approved_at DESC';
+    } else if (sortBy === 'likes') {
+      sqlQuery += ' ORDER BY p.likes_count DESC, up.approved_at DESC';
+    } else if (sortBy === 'comments') {
+      sqlQuery += ' ORDER BY p.comments_count DESC, up.approved_at DESC';
+    } else {
+      sqlQuery += ' ORDER BY up.approved_at DESC';
+    }
+
+    sqlQuery += ` LIMIT $2 OFFSET $3`;
+
+    const result = await pool.query(sqlQuery, [searchTerm, limit, offset]);
+
+    // Get total count
+    const countQuery = `
+      SELECT COUNT(DISTINCT p.id)
+      FROM useful_posts up
+      JOIN posts p ON up.post_id = p.id
+      LEFT JOIN comments c ON p.id = c.post_id
+      WHERE (
+        LOWER(p.title) LIKE $1 OR 
+        LOWER(p.content) LIKE $1 OR 
+        EXISTS (
+          SELECT 1 FROM comments c2 
+          WHERE c2.post_id = p.id AND LOWER(c2.content) LIKE $1
+        )
+      )
+    `;
+    const countResult = await pool.query(countQuery, [searchTerm]);
+
+    res.json({
+      posts: result.rows,
+      total: parseInt(countResult.rows[0].count),
+      page: parseInt(page),
+      totalPages: Math.ceil(countResult.rows[0].count / limit),
+    });
+  } catch (error) {
+    console.error('Error searching useful posts:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 });

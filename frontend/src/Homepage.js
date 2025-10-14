@@ -30,6 +30,9 @@ export default function Homepage({ user, onLogout }) {
   const [showManagerPanel, setShowManagerPanel] = useState(false);
   const [isManager, setIsManager] = useState(false);
 
+  // Track where we came from for proper back navigation
+  const [previousView, setPreviousView] = useState(null);
+
   const categories = ['General', 'Housing', 'Course', 'Events', 'Buy/Sell', 'Jobs', 'Other'];
 
   // Fetch posts when sort or category changes
@@ -61,6 +64,7 @@ export default function Homepage({ user, onLogout }) {
       console.error('Error checking manager status:', error);
     }
   };
+
   const fetchPosts = async () => {
     setLoading(true);
     try {
@@ -127,8 +131,18 @@ export default function Homepage({ user, onLogout }) {
     setSelectedUserId(user.id);
   };
 
-  const handlePostClick = (postId) => {
+  const handlePostClick = (postId, fromView = null) => {
+    setPreviousView(fromView);
     setSelectedPostId(postId);
+  };
+
+  const handleBackFromPostDetail = () => {
+    setSelectedPostId(null);
+    // If we came from useful posts, go back there
+    if (previousView === 'useful') {
+      setShowUsefulPosts(true);
+    }
+    setPreviousView(null);
   };
 
   const formatDate = (dateString) => {
@@ -142,17 +156,18 @@ export default function Homepage({ user, onLogout }) {
     if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)}d ago`;
     return date.toLocaleDateString();
   };
+
   // Conditional rendering for Manager Panel
   if (showManagerPanel) {
     return <ManagerPanel user={user} onBack={() => setShowManagerPanel(false)} />;
   }
 
   // Conditional rendering for Useful Posts
-  if (showUsefulPosts) {
+  if (showUsefulPosts && !selectedPostId) {
     return (
       <UsefulPosts 
         user={user} 
-        onPostClick={handlePostClick}
+        onPostClick={(postId) => handlePostClick(postId, 'useful')}
         onBack={() => setShowUsefulPosts(false)} 
       />
     );
@@ -163,7 +178,7 @@ export default function Homepage({ user, onLogout }) {
     return (
       <PostDetail 
         postId={selectedPostId} 
-        onBack={() => setSelectedPostId(null)} 
+        onBack={handleBackFromPostDetail} 
         user={user} 
       />
     );
@@ -178,7 +193,7 @@ export default function Homepage({ user, onLogout }) {
         onBack={() => setSelectedUserId(null)}
         onPostClick={(postId) => {
           setSelectedUserId(null);
-          setSelectedPostId(postId);
+          handlePostClick(postId);
         }}
       />
     );
@@ -316,7 +331,7 @@ export default function Homepage({ user, onLogout }) {
               <div 
                 key={post.id} 
                 className="post-card"
-                onClick={() => setSelectedPostId(post.id)}
+                onClick={() => handlePostClick(post.id)}
                 style={{ cursor: 'pointer' }}
               >
                 <div className="post-header">

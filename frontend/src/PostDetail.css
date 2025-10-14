@@ -125,6 +125,38 @@
   border-bottom: 1px solid #eee;
 }
 
+/* Reply Banner */
+.replying-to-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #e3f2fd;
+  border-left: 4px solid #13294b;
+  padding: 12px 15px;
+  margin-bottom: 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #13294b;
+}
+
+.replying-to-banner strong {
+  font-weight: 600;
+}
+
+.cancel-reply-btn {
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 0 5px;
+  transition: color 0.2s;
+}
+
+.cancel-reply-btn:hover {
+  color: #13294b;
+}
+
 .comment-input {
   width: 100%;
   padding: 15px;
@@ -178,6 +210,12 @@
   transform: translateY(-2px);
 }
 
+.comment-submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .comments-list {
   display: flex;
   flex-direction: column;
@@ -196,6 +234,7 @@
   padding: 20px;
   border-radius: 10px;
   transition: background 0.2s;
+  position: relative;
 }
 
 .comment-card:hover {
@@ -235,9 +274,73 @@
 .comment-content {
   color: #333;
   line-height: 1.6;
-  margin: 0;
+  margin: 0 0 12px 0;
   font-size: 14px;
   white-space: pre-wrap;
+}
+
+/* Mention Reference Styling */
+.mention-reference {
+  color: #13294b;
+  font-weight: 600;
+  background: #e3f2fd;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-right: 4px;
+}
+
+/* Comment Actions */
+.comment-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+/* Reply Button */
+.reply-btn {
+  background: none;
+  border: 1px solid #ddd;
+  color: #666;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.reply-btn:hover {
+  background: #13294b;
+  color: white;
+  border-color: #13294b;
+}
+
+/* Delete Comment Button */
+.delete-comment-btn {
+  background: none;
+  border: 1px solid #ddd;
+  color: #666;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.delete-comment-btn:hover {
+  background: #f44336;
+  color: white;
+  border-color: #f44336;
+}
+
+.delete-comment-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .loading,
@@ -285,5 +388,9 @@
 
   .comment-submit-btn {
     width: 100%;
+  }
+
+  .replying-to-banner {
+    font-size: 13px;
   }
 }

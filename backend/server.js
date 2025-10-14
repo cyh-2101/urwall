@@ -627,7 +627,49 @@ app.post('/api/posts/:id/comments', authenticateToken, async (req, res) => {
   }
 });
 
-// Get comments for a post
+// Add this route to your backend/server.js file, after the "Get comments for a post" route
+
+// Delete a comment (only by comment author)
+app.delete('/api/comments/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // First, check if the comment exists and get its details
+    const commentResult = await pool.query(
+      'SELECT * FROM comments WHERE id = $1',
+      [id]
+    );
+
+    if (commentResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Comment not found' });
+    }
+
+    const comment = commentResult.rows[0];
+
+    // Check if the user is the comment author
+    if (comment.user_id !== req.user.id) {
+      return res.status(403).json({ message: 'You can only delete your own comments' });
+    }
+
+    // Delete the comment
+    await pool.query('DELETE FROM comments WHERE id = $1', [id]);
+
+    // Decrease the comment count on the post
+    await pool.query(
+      'UPDATE posts SET comments_count = GREATEST(comments_count - 1, 0) WHERE id = $1',
+      [comment.post_id]
+    );
+
+    res.json({ message: 'Comment deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting comment:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// ALSO UPDATE the "Get comments for a post" route to include user_id for ownership check:
+// Replace the existing route with this updated version:
+
 app.get('/api/posts/:id/comments', async (req, res) => {
   const { id } = req.params;
 
@@ -662,13 +704,56 @@ app.get('/api/posts/:id/comments', async (req, res) => {
           // Avatar column might not exist
         }
       }
-      delete commentData.user_id;
+      // Keep user_id for ownership verification but don't expose it publicly for anonymous comments
+      if (!comment.is_anonymous) {
+        delete commentData.user_id;
+      }
       return commentData;
     }));
 
     res.json(commentsWithAvatars);
   } catch (error) {
     console.error('Error fetching comments:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+
+
+// Delete a comment (only by comment author)
+app.delete('/api/comments/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // First, check if the comment exists and get its details
+    const commentResult = await pool.query(
+      'SELECT * FROM comments WHERE id = $1',
+      [id]
+    );
+
+    if (commentResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Comment not found' });
+    }
+
+    const comment = commentResult.rows[0];
+
+    // Check if the user is the comment author
+    if (comment.user_id !== req.user.id) {
+      return res.status(403).json({ message: 'You can only delete your own comments' });
+    }
+
+    // Delete the comment
+    await pool.query('DELETE FROM comments WHERE id = $1', [id]);
+
+    // Decrease the comment count on the post
+    await pool.query(
+      'UPDATE posts SET comments_count = GREATEST(comments_count - 1, 0) WHERE id = $1',
+      [comment.post_id]
+    );
+
+    res.json({ message: 'Comment deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting comment:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 });

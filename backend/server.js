@@ -629,6 +629,144 @@ app.get('/api/posts/:id/comments', async (req, res) => {
   }
 });
 
+// Get user profile
+app.get('/api/users/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const userResult = await pool.query(
+      `SELECT 
+        u.id,
+        u.username,
+        u.email,
+        u.bio,
+        u.avatar_url,
+        u.created_at,
+        (SELECT COUNT(*) FROM posts WHERE user_id = u.id) as total_posts,
+        (SELECT SUM(likes_count) FROM posts WHERE user_id = u.id) as total_likes,
+        (SELECT COUNT(*) FROM comments WHERE user_id = u.id) as total_comments
+      FROM users u
+      WHERE u.id = $1`,
+      [id]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.json(userResult.rows[0]);
+  } catch (error) {
+    console.error('Error fetching user profile:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Get user's posts
+app.get('/api/users/:id/posts', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Get requesting user from token if available
+    let requestingUserId = null;
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        requestingUserId = decoded.id;
+      } catch (err) {
+        // Token invalid, continue without auth
+      }
+    }
+
+    let query;
+    let params;
+
+    // If requesting own posts, include anonymous ones
+    if (requestingUserId && requestingUserId === parseInt(id)) {
+      query = `
+        SELECT 
+          p.id,
+          p.title,
+          p.content,
+          p.category,
+          p.is_anonymous,
+          p.likes_count,
+          p.comments_count,
+          p.created_at
+        FROM posts p
+        WHERE p.user_id = $1
+        ORDER BY p.created_at DESC
+      `;
+      params = [id];
+    } else {
+      // For other users, only show non-anonymous posts
+      query = `
+        SELECT 
+          p.id,
+          p.title,
+          p.content,
+          p.category,
+          p.is_anonymous,
+          p.likes_count,
+          p.comments_count,
+          p.created_at
+        FROM posts p
+        WHERE p.user_id = $1 AND p.is_anonymous = false
+        ORDER BY p.created_at DESC
+      `;
+      params = [id];
+    }
+
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching user posts:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Update user profile
+app.put('/api/users/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { username, bio, avatar_url } = req.body;
+
+  // Check if user is updating their own profile
+  if (req.user.id !== parseInt(id)) {
+    return res.status(403).json({ message: 'You can only update your own profile' });
+  }
+
+  try {
+    // Check if username is already taken by another user
+    if (username) {
+      const existingUser = await pool.query(
+        'SELECT id FROM users WHERE username = $1 AND id != $2',
+        [username, id]
+      );
+      if (existingUser.rows.length > 0) {
+        return res.status(400).json({ message: 'Username already taken' });
+      }
+    }
+
+    // Update user profile
+    const result = await pool.query(
+      `UPDATE users 
+       SET username = COALESCE($1, username),
+           bio = COALESCE($2, bio),
+           avatar_url = COALESCE($3, avatar_url)
+       WHERE id = $4
+       RETURNING id, username, email, bio, avatar_url, created_at`,
+      [username, bio, avatar_url, id]
+    );
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error updating user profile:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 // Test endpoint
 app.get('/api/test', (req, res) => {
   res.json({ message: 'Backend is working!' });

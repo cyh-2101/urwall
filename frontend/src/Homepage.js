@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import './Homepage.css';
 import PostDetail from './PostDetail';
+import UserProfile from './UserProfile';
 
 export default function Homepage({ user, onLogout }) {
   const [posts, setPosts] = useState([]);
   const [showCreatePost, setShowCreatePost] = useState(false);
   const [selectedPostId, setSelectedPostId] = useState(null);
+  const [selectedUserId, setSelectedUserId] = useState(null);
   const [newPost, setNewPost] = useState({
     title: '',
     content: '',
@@ -84,6 +86,10 @@ export default function Homepage({ user, onLogout }) {
     }
   };
 
+  const handleViewProfile = () => {
+    setSelectedUserId(user.id);
+  };
+
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -96,8 +102,30 @@ export default function Homepage({ user, onLogout }) {
     return date.toLocaleDateString();
   };
 
+  // 如果选中了某个帖子，显示帖子详情
   if (selectedPostId) {
-    return <PostDetail postId={selectedPostId} onBack={() => setSelectedPostId(null)} user={user} />;
+    return (
+      <PostDetail 
+        postId={selectedPostId} 
+        onBack={() => setSelectedPostId(null)} 
+        user={user} 
+      />
+    );
+  }
+
+  // 如果选中了某个用户，显示用户个人页面
+  if (selectedUserId) {
+    return (
+      <UserProfile 
+        userId={selectedUserId}
+        currentUser={user}
+        onBack={() => setSelectedUserId(null)}
+        onPostClick={(postId) => {
+          setSelectedUserId(null);
+          setSelectedPostId(postId);
+        }}
+      />
+    );
   }
 
   return (
@@ -105,7 +133,13 @@ export default function Homepage({ user, onLogout }) {
       <nav className="navbar">
         <h1>Campus Wall</h1>
         <div className="nav-right">
-          <span>Welcome, {user.username}!</span>
+          <span 
+            className="username-link" 
+            onClick={handleViewProfile}
+            style={{ cursor: 'pointer', textDecoration: 'underline' }}
+          >
+            Welcome, {user.username}!
+          </span>
           <button onClick={onLogout} className="logout-btn">Logout</button>
         </div>
       </nav>

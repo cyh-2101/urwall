@@ -52,14 +52,14 @@ function generateVerificationCode() {
 
 async function sendVerificationEmail(email, code) {
   const mailOptions = {
-from: 'noreply@urwall.com',  
-    to: email,
-    subject: 'Campus Wall - Verification Code',
-    html: `
-      <h2>Campus Wall Verification</h2>
-      <p>Your verification code is: <strong>${code}</strong></p>
-      <p>This code will expire in 10 minutes.</p>
-    `,
+    from: 'noreply@urwall.com',  
+        to: email,
+        subject: 'Campus Wall - Verification Code',
+        html: `
+          <h2>Campus Wall Verification</h2>
+          <p>Your verification code is: <strong>${code}</strong></p>
+          <p>This code will expire in 10 minutes.</p>
+        `,
   };
 
   try {

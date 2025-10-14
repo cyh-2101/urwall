@@ -1,130 +1,38 @@
-// 数据库初始化函数
-async function initializeDatabase() {
-  try {
-    // 创建 users 表
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        username VARCHAR(255) UNIQUE NOT NULL,
-        password VARCHAR(255) NOT NULL,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        is_manager BOOLEAN DEFAULT FALSE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    // 创建 posts 表
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS posts (
-        id SERIAL PRIMARY KEY,
-        title VARCHAR(255) NOT NULL,
-        content TEXT NOT NULL,
-        category VARCHAR(50) NOT NULL,
-        author VARCHAR(255) NOT NULL,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        is_anonymous BOOLEAN DEFAULT FALSE,
-        likes_count INTEGER DEFAULT 0,
-        comments_count INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    // 创建 comments 表
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS comments (
-        id SERIAL PRIMARY KEY,
-        post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        author VARCHAR(255) NOT NULL,
-        content TEXT NOT NULL,
-        is_anonymous BOOLEAN DEFAULT FALSE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    // 创建 likes 表
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS likes (
-        id SERIAL PRIMARY KEY,
-        post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(post_id, user_id)
-      );
-    `);
-
-    // 创建 useful_posts 表
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS useful_posts (
-        id SERIAL PRIMARY KEY,
-        post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,
-        approved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    // 创建 transfer_requests 表
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS transfer_requests (
-        id SERIAL PRIMARY KEY,
-        post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        status VARCHAR(20) DEFAULT 'pending',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    console.log('✅ 数据库表初始化成功！');
-  } catch (error) {
-    console.error('❌ 数据库初始化失败:', error);
-  }
-}
-
-// 在服务器启动时调用
-initializeDatabase();
 require('dotenv').config();
-console.log('========== ENV VARIABLES ==========');
-console.log('DB_NAME:', process.env.DB_NAME);
-console.log('DB_USER:', process.env.DB_USER);
-console.log('DB_PASSWORD:', process.env.DB_PASSWORD ? '***exists***' : 'MISSING');
-console.log('===================================');
+
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
-
-
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 
+// ============================================
+// Express 初始化
+// ============================================
 const app = express();
+
 app.use(cors({
   origin: [
     'http://localhost:3000',
-    'https://urwall.vercel.app'  // 替换为你的 Vercel URL
+    'https://urwall.vercel.app'
   ],
   credentials: true
 }));
-// Middleware
 
 app.use(express.json());
 
-// Database connection
+// ============================================
+// 数据库配置
+// ============================================
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
-// 测试数据库连接
-pool.connect((err, client, release) => {
-  if (err) {
-    console.error('❌ 数据库连接失败:', err.stack);
-  } else {
-    console.log('✅ 数据库连接成功！');
-    release();
-  }
-});
-
-// Email transporter
+// ============================================
+// Email 配置
+// ============================================
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
@@ -133,12 +41,13 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// Generate verification code
+// ============================================
+// 工具函数
+// ============================================
 function generateVerificationCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-// Send verification email
 async function sendVerificationEmail(email, code) {
   const mailOptions = {
     from: process.env.EMAIL_USER,
@@ -161,10 +70,11 @@ async function sendVerificationEmail(email, code) {
   }
 }
 
-// Initialize database tables with migration support
+// ============================================
+// 数据库初始化
+// ============================================
 async function initializeDatabase() {
   try {
-    // Create users table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
@@ -172,38 +82,11 @@ async function initializeDatabase() {
         email VARCHAR(255) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
         verified BOOLEAN DEFAULT FALSE,
+        avatar_url VARCHAR(500),
+        bio TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-    `);
 
-    // Check if avatar_url column exists
-    const checkAvatarColumn = await pool.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name='users' AND column_name='avatar_url'
-    `);
-    
-    if (checkAvatarColumn.rows.length === 0) {
-      console.log('Adding avatar_url column to users table...');
-      await pool.query('ALTER TABLE users ADD COLUMN avatar_url VARCHAR(500)');
-      console.log('avatar_url column added successfully');
-    }
-
-    // Check if bio column exists
-    const checkBioColumn = await pool.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name='users' AND column_name='bio'
-    `);
-    
-    if (checkBioColumn.rows.length === 0) {
-      console.log('Adding bio column to users table...');
-      await pool.query('ALTER TABLE users ADD COLUMN bio TEXT');
-      console.log('bio column added successfully');
-    }
-
-    // Create other tables
-    await pool.query(`
       CREATE TABLE IF NOT EXISTS verification_codes (
         id SERIAL PRIMARY KEY,
         email VARCHAR(255) NOT NULL,
@@ -272,20 +155,21 @@ async function initializeDatabase() {
       CREATE INDEX IF NOT EXISTS idx_transfer_requests_status ON transfer_requests(status);
     `);
 
-    // Insert default manager
     await pool.query(`
       INSERT INTO managers (email) 
       VALUES ('yuhengc7@illinois.edu')
       ON CONFLICT (email) DO NOTHING
     `);
 
-    console.log('Database tables initialized');
+    console.log('✅ Database initialized successfully');
   } catch (error) {
-    console.error('Error initializing database:', error);
+    console.error('❌ Database initialization failed:', error);
   }
 }
 
-// Middleware to verify JWT token
+// ============================================
+// 中间件
+// ============================================
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -303,7 +187,6 @@ function authenticateToken(req, res, next) {
   });
 }
 
-// Middleware to check if user is manager
 async function authenticateManager(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -316,7 +199,6 @@ async function authenticateManager(req, res, next) {
     const user = jwt.verify(token, process.env.JWT_SECRET);
     req.user = user;
 
-    // Check if user is a manager
     const result = await pool.query(
       'SELECT * FROM managers WHERE email = $1',
       [user.email]
@@ -332,9 +214,9 @@ async function authenticateManager(req, res, next) {
   }
 }
 
-// Routes
-
-// Send verification code
+// ============================================
+// 认证路由
+// ============================================
 app.post('/api/auth/send-verification', async (req, res) => {
   const { email, type } = req.body;
 
@@ -342,23 +224,19 @@ app.post('/api/auth/send-verification', async (req, res) => {
     return res.status(400).json({ message: 'Email and type are required' });
   }
 
-  // Verify it's an illinois.edu email
   if (!email.endsWith('@illinois.edu')) {
     return res.status(400).json({ message: 'Only @illinois.edu emails are allowed' });
   }
 
   try {
-    // Generate code
     const code = generateVerificationCode();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-    // Store code
     await pool.query(
       'INSERT INTO verification_codes (email, code, type, expires_at) VALUES ($1, $2, $3, $4)',
       [email, code, type, expiresAt]
     );
 
-    // Send email
     await sendVerificationEmail(email, code);
 
     res.json({ message: 'Verification code sent successfully' });
@@ -368,7 +246,6 @@ app.post('/api/auth/send-verification', async (req, res) => {
   }
 });
 
-// Register
 app.post('/api/auth/register', async (req, res) => {
   const { username, email, password, verificationCode } = req.body;
 
@@ -385,7 +262,6 @@ app.post('/api/auth/register', async (req, res) => {
   }
 
   try {
-    // Verify code
     const codeResult = await pool.query(
       'SELECT * FROM verification_codes WHERE email = $1 AND code = $2 AND type = $3 AND expires_at > NOW() ORDER BY created_at DESC LIMIT 1',
       [email, verificationCode, 'register']
@@ -395,7 +271,6 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ message: 'Invalid or expired verification code' });
     }
 
-    // Check if user already exists
     const existingUser = await pool.query(
       'SELECT * FROM users WHERE email = $1 OR username = $2',
       [email, username]
@@ -405,16 +280,13 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ message: 'Username or email already exists' });
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user
     await pool.query(
       'INSERT INTO users (username, email, password, verified) VALUES ($1, $2, $3, $4)',
       [username, email, hashedPassword, true]
     );
 
-    // Delete used verification code
     await pool.query(
       'DELETE FROM verification_codes WHERE email = $1 AND code = $2',
       [email, verificationCode]
@@ -427,7 +299,6 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-// Login
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
 
@@ -452,14 +323,12 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ message: 'Invalid email or password' });
     }
 
-    // Check if user is a manager
     const managerResult = await pool.query(
       'SELECT * FROM managers WHERE email = $1',
       [user.email]
     );
     const isManager = managerResult.rows.length > 0;
 
-    // Generate JWT token
     const token = jwt.sign(
       { id: user.id, email: user.email, username: user.username },
       process.env.JWT_SECRET,
@@ -482,7 +351,6 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// Reset password
 app.post('/api/auth/reset-password', async (req, res) => {
   const { email, verificationCode, newPassword } = req.body;
 
@@ -495,7 +363,6 @@ app.post('/api/auth/reset-password', async (req, res) => {
   }
 
   try {
-    // Verify code
     const codeResult = await pool.query(
       'SELECT * FROM verification_codes WHERE email = $1 AND code = $2 AND type = $3 AND expires_at > NOW() ORDER BY created_at DESC LIMIT 1',
       [email, verificationCode, 'reset']
@@ -505,7 +372,6 @@ app.post('/api/auth/reset-password', async (req, res) => {
       return res.status(400).json({ message: 'Invalid or expired verification code' });
     }
 
-    // Check if user exists
     const userResult = await pool.query(
       'SELECT * FROM users WHERE email = $1',
       [email]
@@ -515,16 +381,13 @@ app.post('/api/auth/reset-password', async (req, res) => {
       return res.status(400).json({ message: 'User not found' });
     }
 
-    // Hash new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    // Update password
     await pool.query(
       'UPDATE users SET password = $1 WHERE email = $2',
       [hashedPassword, email]
     );
 
-    // Delete used verification code
     await pool.query(
       'DELETE FROM verification_codes WHERE email = $1 AND code = $2',
       [email, verificationCode]
@@ -537,7 +400,23 @@ app.post('/api/auth/reset-password', async (req, res) => {
   }
 });
 
-// Create a new post
+app.get('/api/auth/check-manager', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM managers WHERE email = $1',
+      [req.user.email]
+    );
+
+    res.json({ isManager: result.rows.length > 0 });
+  } catch (error) {
+    console.error('Error checking manager status:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// ============================================
+// 帖子路由
+// ============================================
 app.post('/api/posts', authenticateToken, async (req, res) => {
   const { title, content, category, isAnonymous } = req.body;
 
@@ -561,7 +440,6 @@ app.post('/api/posts', authenticateToken, async (req, res) => {
   }
 });
 
-// Get all posts (with pagination and sorting)
 app.get('/api/posts', async (req, res) => {
   const { page = 1, limit = 20, sortBy = 'created_at', category } = req.query;
   const offset = (page - 1) * limit;
@@ -588,7 +466,6 @@ app.get('/api/posts', async (req, res) => {
       params.push(category);
     }
 
-    // Sorting
     if (sortBy === 'likes') {
       query += ' ORDER BY p.likes_count DESC, p.created_at DESC';
     } else if (sortBy === 'comments') {
@@ -602,7 +479,6 @@ app.get('/api/posts', async (req, res) => {
 
     const result = await pool.query(query, params);
 
-    // Get total count
     let countQuery = 'SELECT COUNT(*) FROM posts';
     const countParams = [];
     if (category) {
@@ -622,7 +498,7 @@ app.get('/api/posts', async (req, res) => {
     res.status(500).json({ message: 'Internal server error' });
   }
 });
-// Search posts
+
 app.get('/api/posts/search', async (req, res) => {
   const { query, page = 1, limit = 20, sortBy = 'relevance', category } = req.query;
   const offset = (page - 1) * limit;
@@ -644,15 +520,7 @@ app.get('/api/posts/search', async (req, res) => {
         p.likes_count,
         p.comments_count,
         p.created_at,
-        CASE WHEN p.is_anonymous THEN 'Anonymous' ELSE u.username END as author,
-        (
-          CASE WHEN LOWER(p.title) LIKE $1 THEN 3 ELSE 0 END +
-          CASE WHEN LOWER(p.content) LIKE $1 THEN 2 ELSE 0 END +
-          CASE WHEN EXISTS (
-            SELECT 1 FROM comments c 
-            WHERE c.post_id = p.id AND LOWER(c.content) LIKE $1
-          ) THEN 1 ELSE 0 END
-        ) as relevance_score
+        CASE WHEN p.is_anonymous THEN 'Anonymous' ELSE u.username END as author
       FROM posts p
       LEFT JOIN users u ON p.user_id = u.id
       LEFT JOIN comments c ON p.id = c.post_id
@@ -673,10 +541,7 @@ app.get('/api/posts/search', async (req, res) => {
       params.push(category);
     }
 
-    // Sorting
-    if (sortBy === 'relevance') {
-      sqlQuery += ' ORDER BY relevance_score DESC, p.created_at DESC';
-    } else if (sortBy === 'likes') {
+    if (sortBy === 'likes') {
       sqlQuery += ' ORDER BY p.likes_count DESC, p.created_at DESC';
     } else if (sortBy === 'comments') {
       sqlQuery += ' ORDER BY p.comments_count DESC, p.created_at DESC';
@@ -689,7 +554,6 @@ app.get('/api/posts/search', async (req, res) => {
 
     const result = await pool.query(sqlQuery, params);
 
-    // Get total count
     let countQuery = `
       SELECT COUNT(DISTINCT p.id) 
       FROM posts p
@@ -724,7 +588,6 @@ app.get('/api/posts/search', async (req, res) => {
   }
 });
 
-// Get a single post by ID
 app.get('/api/posts/:id', async (req, res) => {
   const { id } = req.params;
 
@@ -774,9 +637,6 @@ app.get('/api/posts/:id', async (req, res) => {
   }
 });
 
-
-
-// Like a post
 app.post('/api/posts/:id/like', authenticateToken, async (req, res) => {
   const { id } = req.params;
 
@@ -801,7 +661,9 @@ app.post('/api/posts/:id/like', authenticateToken, async (req, res) => {
   }
 });
 
-// Add a comment to a post
+// ============================================
+// 评论路由
+// ============================================
 app.post('/api/posts/:id/comments', authenticateToken, async (req, res) => {
   const { id } = req.params;
   const { content, isAnonymous } = req.body;
@@ -827,48 +689,6 @@ app.post('/api/posts/:id/comments', authenticateToken, async (req, res) => {
     res.status(500).json({ message: 'Internal server error' });
   }
 });
-
-
-// Delete a comment (only by comment author)
-app.delete('/api/comments/:id', authenticateToken, async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    // First, check if the comment exists and get its details
-    const commentResult = await pool.query(
-      'SELECT * FROM comments WHERE id = $1',
-      [id]
-    );
-
-    if (commentResult.rows.length === 0) {
-      return res.status(404).json({ message: 'Comment not found' });
-    }
-
-    const comment = commentResult.rows[0];
-
-    // Check if the user is the comment author
-    if (comment.user_id !== req.user.id) {
-      return res.status(403).json({ message: 'You can only delete your own comments' });
-    }
-
-    // Delete the comment
-    await pool.query('DELETE FROM comments WHERE id = $1', [id]);
-
-    // Decrease the comment count on the post
-    await pool.query(
-      'UPDATE posts SET comments_count = GREATEST(comments_count - 1, 0) WHERE id = $1',
-      [comment.post_id]
-    );
-
-    res.json({ message: 'Comment deleted successfully' });
-  } catch (error) {
-    console.error('Error deleting comment:', error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-});
-
-// ALSO UPDATE the "Get comments for a post" route to include user_id for ownership check:
-// Replace the existing route with this updated version:
 
 app.get('/api/posts/:id/comments', async (req, res) => {
   const { id } = req.params;
@@ -904,7 +724,6 @@ app.get('/api/posts/:id/comments', async (req, res) => {
           // Avatar column might not exist
         }
       }
-      // Keep user_id for ownership verification but don't expose it publicly for anonymous comments
       if (!comment.is_anonymous) {
         delete commentData.user_id;
       }
@@ -918,14 +737,10 @@ app.get('/api/posts/:id/comments', async (req, res) => {
   }
 });
 
-
-
-// Delete a comment (only by comment author)
 app.delete('/api/comments/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
 
   try {
-    // First, check if the comment exists and get its details
     const commentResult = await pool.query(
       'SELECT * FROM comments WHERE id = $1',
       [id]
@@ -937,15 +752,12 @@ app.delete('/api/comments/:id', authenticateToken, async (req, res) => {
 
     const comment = commentResult.rows[0];
 
-    // Check if the user is the comment author
     if (comment.user_id !== req.user.id) {
       return res.status(403).json({ message: 'You can only delete your own comments' });
     }
 
-    // Delete the comment
     await pool.query('DELETE FROM comments WHERE id = $1', [id]);
 
-    // Decrease the comment count on the post
     await pool.query(
       'UPDATE posts SET comments_count = GREATEST(comments_count - 1, 0) WHERE id = $1',
       [comment.post_id]
@@ -958,7 +770,9 @@ app.delete('/api/comments/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Get user profile
+// ============================================
+// 用户路由
+// ============================================
 app.get('/api/users/:id', async (req, res) => {
   const { id } = req.params;
 
@@ -990,7 +804,6 @@ app.get('/api/users/:id', async (req, res) => {
   }
 });
 
-// Get user's posts
 app.get('/api/users/:id/posts', async (req, res) => {
   const { id } = req.params;
 
@@ -1004,48 +817,31 @@ app.get('/api/users/:id/posts', async (req, res) => {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         requestingUserId = decoded.id;
       } catch (err) {
-        // Token invalid, continue without auth
+        // Token invalid
       }
     }
 
-    let query;
-    let params;
+    let query = `
+      SELECT 
+        p.id,
+        p.title,
+        p.content,
+        p.category,
+        p.is_anonymous,
+        p.likes_count,
+        p.comments_count,
+        p.created_at
+      FROM posts p
+      WHERE p.user_id = $1
+    `;
 
-    if (requestingUserId && requestingUserId === parseInt(id)) {
-      query = `
-        SELECT 
-          p.id,
-          p.title,
-          p.content,
-          p.category,
-          p.is_anonymous,
-          p.likes_count,
-          p.comments_count,
-          p.created_at
-        FROM posts p
-        WHERE p.user_id = $1
-        ORDER BY p.created_at DESC
-      `;
-      params = [id];
-    } else {
-      query = `
-        SELECT 
-          p.id,
-          p.title,
-          p.content,
-          p.category,
-          p.is_anonymous,
-          p.likes_count,
-          p.comments_count,
-          p.created_at
-        FROM posts p
-        WHERE p.user_id = $1 AND p.is_anonymous = false
-        ORDER BY p.created_at DESC
-      `;
-      params = [id];
+    if (!requestingUserId || requestingUserId !== parseInt(id)) {
+      query += ' AND p.is_anonymous = false';
     }
 
-    const result = await pool.query(query, params);
+    query += ' ORDER BY p.created_at DESC';
+
+    const result = await pool.query(query, [id]);
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching user posts:', error);
@@ -1053,7 +849,6 @@ app.get('/api/users/:id/posts', async (req, res) => {
   }
 });
 
-// Update user profile
 app.put('/api/users/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
   const { username, bio, avatar_url } = req.body;
@@ -1090,9 +885,9 @@ app.put('/api/users/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// ============== USEFUL POSTS ROUTES ==============
-
-// Get all useful posts
+// ============================================
+// Useful Posts 路由
+// ============================================
 app.get('/api/useful-posts', async (req, res) => {
   const { page = 1, limit = 20, sortBy = 'created_at' } = req.query;
   const offset = (page - 1) * limit;
@@ -1126,7 +921,6 @@ app.get('/api/useful-posts', async (req, res) => {
     query += ` LIMIT $1 OFFSET $2`;
 
     const result = await pool.query(query, [limit, offset]);
-
     const countResult = await pool.query('SELECT COUNT(*) FROM useful_posts');
 
     res.json({
@@ -1141,7 +935,6 @@ app.get('/api/useful-posts', async (req, res) => {
   }
 });
 
-// Search useful posts
 app.get('/api/useful-posts/search', async (req, res) => {
   const { query, page = 1, limit = 20, sortBy = 'relevance' } = req.query;
   const offset = (page - 1) * limit;
@@ -1164,19 +957,10 @@ app.get('/api/useful-posts/search', async (req, res) => {
         p.comments_count,
         p.created_at,
         up.approved_at,
-        CASE WHEN p.is_anonymous THEN 'Anonymous' ELSE u.username END as author,
-        (
-          CASE WHEN LOWER(p.title) LIKE $1 THEN 3 ELSE 0 END +
-          CASE WHEN LOWER(p.content) LIKE $1 THEN 2 ELSE 0 END +
-          CASE WHEN EXISTS (
-            SELECT 1 FROM comments c 
-            WHERE c.post_id = p.id AND LOWER(c.content) LIKE $1
-          ) THEN 1 ELSE 0 END
-        ) as relevance_score
+        CASE WHEN p.is_anonymous THEN 'Anonymous' ELSE u.username END as author
       FROM useful_posts up
       JOIN posts p ON up.post_id = p.id
       LEFT JOIN users u ON p.user_id = u.id
-      LEFT JOIN comments c ON p.id = c.post_id
       WHERE (
         LOWER(p.title) LIKE $1 OR 
         LOWER(p.content) LIKE $1 OR 
@@ -1187,10 +971,7 @@ app.get('/api/useful-posts/search', async (req, res) => {
       )
     `;
 
-    // Sorting
-    if (sortBy === 'relevance') {
-      sqlQuery += ' ORDER BY relevance_score DESC, up.approved_at DESC';
-    } else if (sortBy === 'likes') {
+    if (sortBy === 'likes') {
       sqlQuery += ' ORDER BY p.likes_count DESC, up.approved_at DESC';
     } else if (sortBy === 'comments') {
       sqlQuery += ' ORDER BY p.comments_count DESC, up.approved_at DESC';
@@ -1202,12 +983,10 @@ app.get('/api/useful-posts/search', async (req, res) => {
 
     const result = await pool.query(sqlQuery, [searchTerm, limit, offset]);
 
-    // Get total count
     const countQuery = `
       SELECT COUNT(DISTINCT p.id)
       FROM useful_posts up
       JOIN posts p ON up.post_id = p.id
-      LEFT JOIN comments c ON p.id = c.post_id
       WHERE (
         LOWER(p.title) LIKE $1 OR 
         LOWER(p.content) LIKE $1 OR 
@@ -1231,24 +1010,20 @@ app.get('/api/useful-posts/search', async (req, res) => {
   }
 });
 
-// Request to transfer post to useful posts
 app.post('/api/posts/:id/request-transfer', authenticateToken, async (req, res) => {
   const { id } = req.params;
 
   try {
-    // Check if post exists
     const postResult = await pool.query('SELECT * FROM posts WHERE id = $1', [id]);
     if (postResult.rows.length === 0) {
       return res.status(404).json({ message: 'Post not found' });
     }
 
-    // Check if already in useful posts
     const usefulPostCheck = await pool.query('SELECT * FROM useful_posts WHERE post_id = $1', [id]);
     if (usefulPostCheck.rows.length > 0) {
       return res.status(400).json({ message: 'Post is already in useful posts' });
     }
 
-    // Check if request already exists
     const existingRequest = await pool.query(
       'SELECT * FROM transfer_requests WHERE post_id = $1 AND status = $2',
       [id, 'pending']
@@ -1257,7 +1032,6 @@ app.post('/api/posts/:id/request-transfer', authenticateToken, async (req, res) 
       return res.status(400).json({ message: 'Transfer request already pending' });
     }
 
-    // Create transfer request
     await pool.query(
       'INSERT INTO transfer_requests (post_id, user_id, status) VALUES ($1, $2, $3)',
       [id, req.user.id, 'pending']
@@ -1270,24 +1044,9 @@ app.post('/api/posts/:id/request-transfer', authenticateToken, async (req, res) 
   }
 });
 
-// Check if current user is a manager
-app.get('/api/auth/check-manager', authenticateToken, async (req, res) => {
-  try {
-    const result = await pool.query(
-      'SELECT * FROM managers WHERE email = $1',
-      [req.user.email]
-    );
-
-    res.json({ isManager: result.rows.length > 0 });
-  } catch (error) {
-    console.error('Error checking manager status:', error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-});
-
-// ============== MANAGER ROUTES ==============
-
-// Get all posts with real authors (manager only)
+// ============================================
+// 管理员路由
+// ============================================
 app.get('/api/manager/all-posts', authenticateManager, async (req, res) => {
   const { page = 1, limit = 20 } = req.query;
   const offset = (page - 1) * limit;
@@ -1327,7 +1086,6 @@ app.get('/api/manager/all-posts', authenticateManager, async (req, res) => {
   }
 });
 
-// Get all transfer requests (manager only)
 app.get('/api/manager/transfer-requests', authenticateManager, async (req, res) => {
   const { status = 'pending' } = req.query;
 
@@ -1367,12 +1125,10 @@ app.get('/api/manager/transfer-requests', authenticateManager, async (req, res) 
   }
 });
 
-// Approve transfer request (manager only)
 app.post('/api/manager/transfer-requests/:id/approve', authenticateManager, async (req, res) => {
   const { id } = req.params;
 
   try {
-    // Get the request
     const requestResult = await pool.query(
       'SELECT * FROM transfer_requests WHERE id = $1',
       [id]
@@ -1384,7 +1140,6 @@ app.post('/api/manager/transfer-requests/:id/approve', authenticateManager, asyn
 
     const request = requestResult.rows[0];
 
-    // Check if already in useful posts
     const usefulPostCheck = await pool.query(
       'SELECT * FROM useful_posts WHERE post_id = $1',
       [request.post_id]
@@ -1394,13 +1149,11 @@ app.post('/api/manager/transfer-requests/:id/approve', authenticateManager, asyn
       return res.status(400).json({ message: 'Post is already in useful posts' });
     }
 
-    // Add to useful posts
     await pool.query(
       'INSERT INTO useful_posts (post_id) VALUES ($1)',
       [request.post_id]
     );
 
-    // Update request status
     await pool.query(
       'UPDATE transfer_requests SET status = $1, reviewed_at = NOW() WHERE id = $2',
       ['approved', id]
@@ -1413,7 +1166,6 @@ app.post('/api/manager/transfer-requests/:id/approve', authenticateManager, asyn
   }
 });
 
-// Reject transfer request (manager only)
 app.post('/api/manager/transfer-requests/:id/reject', authenticateManager, async (req, res) => {
   const { id } = req.params;
 
@@ -1434,7 +1186,6 @@ app.post('/api/manager/transfer-requests/:id/reject', authenticateManager, async
   }
 });
 
-// Delete a post (manager only)
 app.delete('/api/manager/posts/:id', authenticateManager, async (req, res) => {
   const { id } = req.params;
 
@@ -1452,23 +1203,33 @@ app.delete('/api/manager/posts/:id', authenticateManager, async (req, res) => {
   }
 });
 
-// Test endpoint
+// ============================================
+// 测试路由
+// ============================================
 app.get('/api/test', (req, res) => {
-  res.json({ message: 'Backend is working!' });
+  res.json({ 
+    message: 'Backend is working!',
+    database: !!process.env.DATABASE_URL 
+  });
 });
 
-// Start server
+// ============================================
+// 启动服务器
+// ============================================
 const PORT = process.env.PORT || 5000;
 
-pool.connect((err) => {
+pool.connect((err, client, release) => {
   if (err) {
-    console.error('Database connection error:', err.stack);
+    console.error('❌ Database connection failed:', err.stack);
+    process.exit(1);
   } else {
-    console.log('Connected to database');
-    initializeDatabase();
+    console.log('✅ Database connected successfully');
+    release();
+    
+    initializeDatabase().then(() => {
+      app.listen(PORT, () => {
+        console.log(`🚀 Server running on port ${PORT}`);
+      });
+    });
   }
-});
-
-app.listen(PORT, () => {
-  console.log(`Server running on https://urwall-production.up.railway.app:${PORT}`);
 });

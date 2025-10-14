@@ -5,8 +5,12 @@ import Homepage from './Homepage';
 export default function Auth() {
   const [user, setUser] = useState(null);
   const [activeTab, setActiveTab] = useState('login');
+  
+  // Login state
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  
+  // Register state
   const [registerUsername, setRegisterUsername] = useState('');
   const [registerEmail, setRegisterEmail] = useState('');
   const [registerPassword, setRegisterPassword] = useState('');
@@ -14,6 +18,7 @@ export default function Auth() {
   const [registerVerificationCode, setRegisterVerificationCode] = useState('');
   const [registrationSent, setRegistrationSent] = useState(false);
   
+  // Reset password state
   const [resetEmail, setResetEmail] = useState('');
   const [resetVerificationCode, setResetVerificationCode] = useState('');
   const [resetPassword, setResetPassword] = useState('');
@@ -21,9 +26,11 @@ export default function Auth() {
   const [resetSent, setResetSent] = useState(false);
   const [resetCodeVerified, setResetCodeVerified] = useState(false);
   
+  // Message state
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('');
 
+  // Check for stored user on mount
   useEffect(() => {
     const token = localStorage.getItem('token');
     const storedUser = localStorage.getItem('user');
@@ -141,26 +148,6 @@ export default function Auth() {
     }
   };
 
-  const handleVerifyResetCode = async (e) => {
-    e.preventDefault();
-    try {
-      const response = await fetch('http://localhost:5000/api/auth/verify-code', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: resetEmail, code: resetVerificationCode })
-      });
-      const data = await response.json();
-      if (response.ok) {
-        showMessage('Code verified!', 'success');
-        setResetCodeVerified(true);
-      } else {
-        showMessage(data.message || 'Invalid code', 'error');
-      }
-    } catch (error) {
-      showMessage('Network error', 'error');
-    }
-  };
-
   const handleResetPassword = async (e) => {
     e.preventDefault();
     if (resetPassword !== confirmResetPassword) {
@@ -200,11 +187,12 @@ export default function Auth() {
     localStorage.removeItem('user');
     setUser(null);
   };
-
+  // If user is logged in, show Homepage
   if (user) {
     return <Homepage user={user} onLogout={handleLogout} />;
   }
 
+  // Helper functions for rendering form elements
   const renderInput = (label, type, value, onChange, placeholder, props = {}) => (
     <div className="auth-form-group">
       <label>{label}</label>
@@ -263,6 +251,7 @@ export default function Auth() {
             </div>
           )}
 
+          {/* Login Tab */}
           {activeTab === 'login' && (
             <div>
               {renderInput('Email', 'email', loginEmail, (e) => setLoginEmail(e.target.value), 'Enter your email', { required: true })}
@@ -271,6 +260,7 @@ export default function Auth() {
             </div>
           )}
 
+          {/* Register Tab */}
           {activeTab === 'register' && (
             <div>
               {renderInput('Username', 'text', registerUsername, (e) => setRegisterUsername(e.target.value), 'Username (3+ characters)', { minLength: 3, required: true })}
@@ -289,6 +279,7 @@ export default function Auth() {
             </div>
           )}
 
+          {/* Reset Password Tab */}
           {activeTab === 'reset' && (
             <div>
               {!resetSent ? (
@@ -296,17 +287,11 @@ export default function Auth() {
                   {renderInput('Email', 'email', resetEmail, (e) => setResetEmail(e.target.value), 'Enter your email', { required: true })}
                   {renderButton('Send Verification Code', handleSendResetCode)}
                 </>
-              ) : !resetCodeVerified ? (
-                <>
-                  {renderInput('Email', 'email', resetEmail, (e) => setResetEmail(e.target.value), 'Your email', { disabled: true })}
-                  {renderInput('Verification Code', 'text', resetVerificationCode, (e) => setResetVerificationCode(e.target.value), 'Enter code from email', { required: true })}
-                  {renderButton('Verify Code', handleVerifyResetCode)}
-                </>
               ) : (
                 <>
-                  {renderInput('Email', 'email', resetEmail, (e) => setResetEmail(e.target.value), 'Your email', { disabled: true })}
+                  {renderInput('Verification Code', 'text', resetVerificationCode, (e) => setResetVerificationCode(e.target.value), 'Enter code from email', { required: true })}
                   {renderInput('New Password', 'password', resetPassword, (e) => setResetPassword(e.target.value), 'New password (6+ characters)', { minLength: 6, required: true })}
-                  {renderInput('Confirm Password', 'password', confirmResetPassword, (e) => setConfirmResetPassword(e.target.value), 'Confirm password', { required: true })}
+                  {renderInput('Confirm New Password', 'password', confirmResetPassword, (e) => setConfirmResetPassword(e.target.value), 'Confirm new password', { required: true })}
                   {renderButton('Reset Password', handleResetPassword)}
                 </>
               )}

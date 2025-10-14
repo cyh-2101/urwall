@@ -2,28 +2,65 @@ import React, { useState, useEffect } from 'react';
 import './Homepage.css';
 import PostDetail from './PostDetail';
 import UserProfile from './UserProfile';
+import UsefulPosts from './UsefulPosts';
+import ManagerPanel from './ManagerPanel';
 
 export default function Homepage({ user, onLogout }) {
+  // Posts and UI state
   const [posts, setPosts] = useState([]);
   const [showCreatePost, setShowCreatePost] = useState(false);
   const [selectedPostId, setSelectedPostId] = useState(null);
   const [selectedUserId, setSelectedUserId] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  // New post form state
   const [newPost, setNewPost] = useState({
     title: '',
     content: '',
     category: 'General',
     isAnonymous: false,
   });
+
+  // Filter and sort state
   const [sortBy, setSortBy] = useState('created_at');
   const [selectedCategory, setSelectedCategory] = useState('');
-  const [loading, setLoading] = useState(false);
+
+  // Manager and useful posts state
+  const [showUsefulPosts, setShowUsefulPosts] = useState(false);
+  const [showManagerPanel, setShowManagerPanel] = useState(false);
+  const [isManager, setIsManager] = useState(false);
 
   const categories = ['General', 'Housing', 'Course', 'Events', 'Buy/Sell', 'Jobs', 'Other'];
 
+  // Fetch posts when sort or category changes
   useEffect(() => {
     fetchPosts();
   }, [sortBy, selectedCategory]);
 
+  // Check if user is a manager
+  useEffect(() => {
+    checkManagerStatus();
+  }, []);
+
+  const checkManagerStatus = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      
+      const response = await fetch('http://localhost:5000/api/auth/check-manager', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setIsManager(data.isManager);
+      }
+    } catch (error) {
+      console.error('Error checking manager status:', error);
+    }
+  };
   const fetchPosts = async () => {
     setLoading(true);
     try {
@@ -90,6 +127,10 @@ export default function Homepage({ user, onLogout }) {
     setSelectedUserId(user.id);
   };
 
+  const handlePostClick = (postId) => {
+    setSelectedPostId(postId);
+  };
+
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -101,8 +142,23 @@ export default function Homepage({ user, onLogout }) {
     if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)}d ago`;
     return date.toLocaleDateString();
   };
+  // Conditional rendering for Manager Panel
+  if (showManagerPanel) {
+    return <ManagerPanel user={user} onBack={() => setShowManagerPanel(false)} />;
+  }
 
-  // 如果选中了某个帖子，显示帖子详情
+  // Conditional rendering for Useful Posts
+  if (showUsefulPosts) {
+    return (
+      <UsefulPosts 
+        user={user} 
+        onPostClick={handlePostClick}
+        onBack={() => setShowUsefulPosts(false)} 
+      />
+    );
+  }
+
+  // Conditional rendering for Post Detail
   if (selectedPostId) {
     return (
       <PostDetail 
@@ -113,7 +169,7 @@ export default function Homepage({ user, onLogout }) {
     );
   }
 
-  // 如果选中了某个用户，显示用户个人页面
+  // Conditional rendering for User Profile
   if (selectedUserId) {
     return (
       <UserProfile 
@@ -140,6 +196,14 @@ export default function Homepage({ user, onLogout }) {
           >
             Welcome, {user.username}!
           </span>
+          {isManager && (
+            <button 
+              onClick={() => setShowManagerPanel(true)} 
+              className="control-btn"
+            >
+              🔧 Control
+            </button>
+          )}
           <button onClick={onLogout} className="logout-btn">Logout</button>
         </div>
       </nav>
@@ -182,6 +246,23 @@ export default function Homepage({ user, onLogout }) {
         </aside>
 
         <main className="feed">
+          {/* View Tabs for General Posts vs Useful Posts */}
+          <div className="view-tabs">
+            <button 
+              onClick={() => setShowUsefulPosts(false)} 
+              className={`view-tab ${!showUsefulPosts ? 'active' : ''}`}
+            >
+              General Posts
+            </button>
+            <button 
+              onClick={() => setShowUsefulPosts(true)} 
+              className="view-tab"
+            >
+              干货板块 - Useful Posts
+            </button>
+          </div>
+
+          {/* Create Post Modal */}
           {showCreatePost && (
             <div className="modal-overlay" onClick={() => setShowCreatePost(false)}>
               <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -225,7 +306,7 @@ export default function Homepage({ user, onLogout }) {
               </div>
             </div>
           )}
-
+          {/* Posts List */}
           {loading ? (
             <div className="loading">Loading posts...</div>
           ) : posts.length === 0 ? (

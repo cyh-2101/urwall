@@ -66,7 +66,7 @@ async function sendVerificationEmail(email, code) {
 // Initialize database tables with migration support
 async function initializeDatabase() {
   try {
-    // Create tables if they don't exist
+    // Create users table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
@@ -78,7 +78,7 @@ async function initializeDatabase() {
       );
     `);
 
-    // Check if avatar_url column exists and add it if it doesn't
+    // Check if avatar_url column exists
     const checkAvatarColumn = await pool.query(`
       SELECT column_name 
       FROM information_schema.columns 
@@ -91,7 +91,7 @@ async function initializeDatabase() {
       console.log('avatar_url column added successfully');
     }
 
-    // Check if bio column exists and add it if it doesn't
+    // Check if bio column exists
     const checkBioColumn = await pool.query(`
       SELECT column_name 
       FROM information_schema.columns 
@@ -144,14 +144,93 @@ async function initializeDatabase() {
         UNIQUE(post_id, user_id)
       );
 
+      CREATE TABLE IF NOT EXISTS managers (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS useful_posts (
+        id SERIAL PRIMARY KEY,
+        post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,
+        approved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(post_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS transfer_requests (
+        id SERIAL PRIMARY KEY,
+        post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        status VARCHAR(20) DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        reviewed_at TIMESTAMP,
+        UNIQUE(post_id)
+      );
+
       CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_posts_category ON posts(category);
       CREATE INDEX IF NOT EXISTS idx_comments_post_id ON comments(post_id);
       CREATE INDEX IF NOT EXISTS idx_likes_post_id ON likes(post_id);
+      CREATE INDEX IF NOT EXISTS idx_transfer_requests_status ON transfer_requests(status);
     `);
+
+    // Insert default manager
+    await pool.query(`
+      INSERT INTO managers (email) 
+      VALUES ('yuhengc7@illinois.edu')
+      ON CONFLICT (email) DO NOTHING
+    `);
+
     console.log('Database tables initialized');
   } catch (error) {
     console.error('Error initializing database:', error);
+  }
+}
+
+// Middleware to verify JWT token
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ message: 'Access token required' });
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ message: 'Invalid or expired token' });
+    }
+    req.user = user;
+    next();
+  });
+}
+
+// Middleware to check if user is manager
+async function authenticateManager(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ message: 'Access token required' });
+  }
+
+  try {
+    const user = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = user;
+
+    // Check if user is a manager
+    const result = await pool.query(
+      'SELECT * FROM managers WHERE email = $1',
+      [user.email]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(403).json({ message: 'Manager access required' });
+    }
+
+    next();
+  } catch (err) {
+    return res.status(403).json({ message: 'Invalid or expired token' });
   }
 }
 
@@ -165,38 +244,17 @@ app.post('/api/auth/send-verification', async (req, res) => {
     return res.status(400).json({ message: 'Email and type are required' });
   }
 
-  if (type === 'register' && !email.endsWith('@illinois.edu')) {
-    return res.status(400).json({ message: 'Email must be @illinois.edu for registration' });
+  // Verify it's an illinois.edu email
+  if (!email.endsWith('@illinois.edu')) {
+    return res.status(400).json({ message: 'Only @illinois.edu emails are allowed' });
   }
 
   try {
-    // Check if email already exists for registration
-    if (type === 'register') {
-      const existingUser = await pool.query(
-        'SELECT * FROM users WHERE email = $1',
-        [email]
-      );
-      if (existingUser.rows.length > 0) {
-        return res.status(400).json({ message: 'Email already registered' });
-      }
-    }
-
-    // Check if email exists for password reset
-    if (type === 'reset') {
-      const user = await pool.query(
-        'SELECT * FROM users WHERE email = $1',
-        [email]
-      );
-      if (user.rows.length === 0) {
-        return res.status(400).json({ message: 'Email not found' });
-      }
-    }
-
-    // Generate and send code
+    // Generate code
     const code = generateVerificationCode();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-    // Store verification code
+    // Store code
     await pool.query(
       'INSERT INTO verification_codes (email, code, type, expires_at) VALUES ($1, $2, $3, $4)',
       [email, code, type, expiresAt]
@@ -205,7 +263,7 @@ app.post('/api/auth/send-verification', async (req, res) => {
     // Send email
     await sendVerificationEmail(email, code);
 
-    res.json({ message: 'Verification code sent to your email' });
+    res.json({ message: 'Verification code sent successfully' });
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ message: 'Failed to send verification code' });
@@ -218,6 +276,10 @@ app.post('/api/auth/register', async (req, res) => {
 
   if (!username || !email || !password || !verificationCode) {
     return res.status(400).json({ message: 'All fields are required' });
+  }
+
+  if (!email.endsWith('@illinois.edu')) {
+    return res.status(400).json({ message: 'Only @illinois.edu emails are allowed' });
   }
 
   if (password.length < 6) {
@@ -235,13 +297,14 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ message: 'Invalid or expired verification code' });
     }
 
-    // Check if username already exists
-    const existingUsername = await pool.query(
-      'SELECT * FROM users WHERE username = $1',
-      [username]
+    // Check if user already exists
+    const existingUser = await pool.query(
+      'SELECT * FROM users WHERE email = $1 OR username = $2',
+      [email, username]
     );
-    if (existingUsername.rows.length > 0) {
-      return res.status(400).json({ message: 'Username already taken' });
+
+    if (existingUser.rows.length > 0) {
+      return res.status(400).json({ message: 'Username or email already exists' });
     }
 
     // Hash password
@@ -291,6 +354,13 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ message: 'Invalid email or password' });
     }
 
+    // Check if user is a manager
+    const managerResult = await pool.query(
+      'SELECT * FROM managers WHERE email = $1',
+      [user.email]
+    );
+    const isManager = managerResult.rows.length > 0;
+
     // Generate JWT token
     const token = jwt.sign(
       { id: user.id, email: user.email, username: user.username },
@@ -305,6 +375,7 @@ app.post('/api/auth/login', async (req, res) => {
         id: user.id,
         username: user.username,
         email: user.email,
+        isManager: isManager,
       },
     });
   } catch (error) {
@@ -367,24 +438,6 @@ app.post('/api/auth/reset-password', async (req, res) => {
     res.status(500).json({ message: 'Internal server error' });
   }
 });
-
-// Middleware to verify JWT token
-function authenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({ message: 'Access token required' });
-  }
-
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) {
-      return res.status(403).json({ message: 'Invalid or expired token' });
-    }
-    req.user = user;
-    next();
-  });
-}
 
 // Create a new post
 app.post('/api/posts', authenticateToken, async (req, res) => {
@@ -477,7 +530,6 @@ app.get('/api/posts/:id', async (req, res) => {
   const { id } = req.params;
 
   try {
-    // Fixed query - removed u.avatar_url reference or handle it gracefully
     const result = await pool.query(
       `SELECT 
         p.id, 
@@ -500,7 +552,6 @@ app.get('/api/posts/:id', async (req, res) => {
       return res.status(404).json({ message: 'Post not found' });
     }
 
-    // If not anonymous and avatar_url column exists, get it
     let postData = result.rows[0];
     if (!postData.is_anonymous && postData.user_id) {
       try {
@@ -512,14 +563,11 @@ app.get('/api/posts/:id', async (req, res) => {
           postData.author_avatar = userResult.rows[0].avatar_url;
         }
       } catch (err) {
-        // Avatar column might not exist, ignore error
         console.log('Avatar column not available');
       }
     }
 
-    // Remove user_id from response
     delete postData.user_id;
-
     res.json(postData);
   } catch (error) {
     console.error('Error fetching post:', error);
@@ -532,19 +580,16 @@ app.post('/api/posts/:id/like', authenticateToken, async (req, res) => {
   const { id } = req.params;
 
   try {
-    // Check if already liked
     const existingLike = await pool.query(
       'SELECT * FROM likes WHERE post_id = $1 AND user_id = $2',
       [id, req.user.id]
     );
 
     if (existingLike.rows.length > 0) {
-      // Unlike
       await pool.query('DELETE FROM likes WHERE post_id = $1 AND user_id = $2', [id, req.user.id]);
       await pool.query('UPDATE posts SET likes_count = likes_count - 1 WHERE id = $1', [id]);
       res.json({ message: 'Post unliked', liked: false });
     } else {
-      // Like
       await pool.query('INSERT INTO likes (post_id, user_id) VALUES ($1, $2)', [id, req.user.id]);
       await pool.query('UPDATE posts SET likes_count = likes_count + 1 WHERE id = $1', [id]);
       res.json({ message: 'Post liked', liked: true });
@@ -602,7 +647,6 @@ app.get('/api/posts/:id/comments', async (req, res) => {
       [id]
     );
 
-    // Add avatar_url if available and not anonymous
     const commentsWithAvatars = await Promise.all(result.rows.map(async (comment) => {
       let commentData = { ...comment };
       if (!comment.is_anonymous && comment.user_id) {
@@ -615,7 +659,7 @@ app.get('/api/posts/:id/comments', async (req, res) => {
             commentData.author_avatar = userResult.rows[0].avatar_url;
           }
         } catch (err) {
-          // Avatar column might not exist, ignore error
+          // Avatar column might not exist
         }
       }
       delete commentData.user_id;
@@ -666,7 +710,6 @@ app.get('/api/users/:id/posts', async (req, res) => {
   const { id } = req.params;
 
   try {
-    // Get requesting user from token if available
     let requestingUserId = null;
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -683,7 +726,6 @@ app.get('/api/users/:id/posts', async (req, res) => {
     let query;
     let params;
 
-    // If requesting own posts, include anonymous ones
     if (requestingUserId && requestingUserId === parseInt(id)) {
       query = `
         SELECT 
@@ -701,7 +743,6 @@ app.get('/api/users/:id/posts', async (req, res) => {
       `;
       params = [id];
     } else {
-      // For other users, only show non-anonymous posts
       query = `
         SELECT 
           p.id,
@@ -732,13 +773,11 @@ app.put('/api/users/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
   const { username, bio, avatar_url } = req.body;
 
-  // Check if user is updating their own profile
   if (req.user.id !== parseInt(id)) {
     return res.status(403).json({ message: 'You can only update your own profile' });
   }
 
   try {
-    // Check if username is already taken by another user
     if (username) {
       const existingUser = await pool.query(
         'SELECT id FROM users WHERE username = $1 AND id != $2',
@@ -749,7 +788,6 @@ app.put('/api/users/:id', authenticateToken, async (req, res) => {
       }
     }
 
-    // Update user profile
     const result = await pool.query(
       `UPDATE users 
        SET username = COALESCE($1, username),
@@ -763,6 +801,278 @@ app.put('/api/users/:id', authenticateToken, async (req, res) => {
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error updating user profile:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// ============== USEFUL POSTS ROUTES ==============
+
+// Get all useful posts
+app.get('/api/useful-posts', async (req, res) => {
+  const { page = 1, limit = 20, sortBy = 'created_at' } = req.query;
+  const offset = (page - 1) * limit;
+
+  try {
+    let query = `
+      SELECT 
+        p.id, 
+        p.title, 
+        p.content, 
+        p.category, 
+        p.is_anonymous,
+        p.likes_count,
+        p.comments_count,
+        p.created_at,
+        up.approved_at,
+        CASE WHEN p.is_anonymous THEN 'Anonymous' ELSE u.username END as author
+      FROM useful_posts up
+      JOIN posts p ON up.post_id = p.id
+      LEFT JOIN users u ON p.user_id = u.id
+    `;
+
+    if (sortBy === 'likes') {
+      query += ' ORDER BY p.likes_count DESC, up.approved_at DESC';
+    } else if (sortBy === 'comments') {
+      query += ' ORDER BY p.comments_count DESC, up.approved_at DESC';
+    } else {
+      query += ' ORDER BY up.approved_at DESC';
+    }
+
+    query += ` LIMIT $1 OFFSET $2`;
+
+    const result = await pool.query(query, [limit, offset]);
+
+    const countResult = await pool.query('SELECT COUNT(*) FROM useful_posts');
+
+    res.json({
+      posts: result.rows,
+      total: parseInt(countResult.rows[0].count),
+      page: parseInt(page),
+      totalPages: Math.ceil(countResult.rows[0].count / limit),
+    });
+  } catch (error) {
+    console.error('Error fetching useful posts:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Request to transfer post to useful posts
+app.post('/api/posts/:id/request-transfer', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Check if post exists
+    const postResult = await pool.query('SELECT * FROM posts WHERE id = $1', [id]);
+    if (postResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    // Check if already in useful posts
+    const usefulPostCheck = await pool.query('SELECT * FROM useful_posts WHERE post_id = $1', [id]);
+    if (usefulPostCheck.rows.length > 0) {
+      return res.status(400).json({ message: 'Post is already in useful posts' });
+    }
+
+    // Check if request already exists
+    const existingRequest = await pool.query(
+      'SELECT * FROM transfer_requests WHERE post_id = $1 AND status = $2',
+      [id, 'pending']
+    );
+    if (existingRequest.rows.length > 0) {
+      return res.status(400).json({ message: 'Transfer request already pending' });
+    }
+
+    // Create transfer request
+    await pool.query(
+      'INSERT INTO transfer_requests (post_id, user_id, status) VALUES ($1, $2, $3)',
+      [id, req.user.id, 'pending']
+    );
+
+    res.json({ message: 'Transfer request submitted successfully' });
+  } catch (error) {
+    console.error('Error creating transfer request:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Check if current user is a manager
+app.get('/api/auth/check-manager', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM managers WHERE email = $1',
+      [req.user.email]
+    );
+
+    res.json({ isManager: result.rows.length > 0 });
+  } catch (error) {
+    console.error('Error checking manager status:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// ============== MANAGER ROUTES ==============
+
+// Get all posts with real authors (manager only)
+app.get('/api/manager/all-posts', authenticateManager, async (req, res) => {
+  const { page = 1, limit = 20 } = req.query;
+  const offset = (page - 1) * limit;
+
+  try {
+    const result = await pool.query(
+      `SELECT 
+        p.id,
+        p.title,
+        p.content,
+        p.category,
+        p.is_anonymous,
+        p.likes_count,
+        p.comments_count,
+        p.created_at,
+        u.id as user_id,
+        u.username,
+        u.email
+      FROM posts p
+      JOIN users u ON p.user_id = u.id
+      ORDER BY p.created_at DESC
+      LIMIT $1 OFFSET $2`,
+      [limit, offset]
+    );
+
+    const countResult = await pool.query('SELECT COUNT(*) FROM posts');
+
+    res.json({
+      posts: result.rows,
+      total: parseInt(countResult.rows[0].count),
+      page: parseInt(page),
+      totalPages: Math.ceil(countResult.rows[0].count / limit),
+    });
+  } catch (error) {
+    console.error('Error fetching all posts for manager:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Get all transfer requests (manager only)
+app.get('/api/manager/transfer-requests', authenticateManager, async (req, res) => {
+  const { status = 'pending' } = req.query;
+
+  try {
+    const result = await pool.query(
+      `SELECT 
+        tr.id as request_id,
+        tr.post_id,
+        tr.status,
+        tr.created_at as requested_at,
+        tr.reviewed_at,
+        p.title,
+        p.content,
+        p.category,
+        p.is_anonymous,
+        p.likes_count,
+        p.comments_count,
+        u.id as requester_id,
+        u.username as requester_username,
+        u.email as requester_email,
+        author.id as author_id,
+        author.username as author_username,
+        author.email as author_email
+      FROM transfer_requests tr
+      JOIN posts p ON tr.post_id = p.id
+      JOIN users u ON tr.user_id = u.id
+      JOIN users author ON p.user_id = author.id
+      WHERE tr.status = $1
+      ORDER BY tr.created_at DESC`,
+      [status]
+    );
+
+    res.json({ requests: result.rows });
+  } catch (error) {
+    console.error('Error fetching transfer requests:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Approve transfer request (manager only)
+app.post('/api/manager/transfer-requests/:id/approve', authenticateManager, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Get the request
+    const requestResult = await pool.query(
+      'SELECT * FROM transfer_requests WHERE id = $1',
+      [id]
+    );
+
+    if (requestResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Transfer request not found' });
+    }
+
+    const request = requestResult.rows[0];
+
+    // Check if already in useful posts
+    const usefulPostCheck = await pool.query(
+      'SELECT * FROM useful_posts WHERE post_id = $1',
+      [request.post_id]
+    );
+
+    if (usefulPostCheck.rows.length > 0) {
+      return res.status(400).json({ message: 'Post is already in useful posts' });
+    }
+
+    // Add to useful posts
+    await pool.query(
+      'INSERT INTO useful_posts (post_id) VALUES ($1)',
+      [request.post_id]
+    );
+
+    // Update request status
+    await pool.query(
+      'UPDATE transfer_requests SET status = $1, reviewed_at = NOW() WHERE id = $2',
+      ['approved', id]
+    );
+
+    res.json({ message: 'Transfer request approved successfully' });
+  } catch (error) {
+    console.error('Error approving transfer request:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Reject transfer request (manager only)
+app.post('/api/manager/transfer-requests/:id/reject', authenticateManager, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(
+      'UPDATE transfer_requests SET status = $1, reviewed_at = NOW() WHERE id = $2 RETURNING *',
+      ['rejected', id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Transfer request not found' });
+    }
+
+    res.json({ message: 'Transfer request rejected successfully' });
+  } catch (error) {
+    console.error('Error rejecting transfer request:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Delete a post (manager only)
+app.delete('/api/manager/posts/:id', authenticateManager, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query('DELETE FROM posts WHERE id = $1 RETURNING *', [id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    res.json({ message: 'Post deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting post:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 });

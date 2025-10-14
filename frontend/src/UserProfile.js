@@ -41,17 +41,26 @@ export default function UserProfile({ userId, currentUser, onBack, onPostClick }
     }
   };
 
-  const fetchUserPosts = async () => {
-    try {
-      const response = await fetch(`http://localhost:5000/api/users/${userId}/posts`);
-      if (response.ok) {
-        const data = await response.json();
-        setPosts(data);
-      }
-    } catch (error) {
-      console.error('Error fetching user posts:', error);
+const fetchUserPosts = async () => {
+  try {
+    const token = localStorage.getItem('token');
+    const headers = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
     }
-  };
+    
+    const response = await fetch(`http://localhost:5000/api/users/${userId}/posts`, {
+      headers: headers
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      setPosts(data);
+    }
+  } catch (error) {
+    console.error('Error fetching user posts:', error);
+  }
+};
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();

@@ -22,7 +22,7 @@ export default function UserProfile({ userId, currentUser, onBack, onPostClick }
 
   const fetchUserProfile = async () => {
     try {
-      const response = await fetch(`http://localhost:5000/api/users/${userId}`);
+      const response = await fetch(`https://urwall-production.up.railway.app/api/users/${userId}`);
       if (response.ok) {
         const data = await response.json();
         setProfile(data);

@@ -26,10 +26,10 @@ export default function UsefulPosts({ user, onPostClick, onBack }) {
       
       if (searchQuery.trim()) {
         // Use search endpoint if there's a search query
-        url = `http://localhost:5000/api/useful-posts/search?query=${encodeURIComponent(searchQuery)}&page=${page}&limit=20&sortBy=${sortBy}`;
+        url = `https://urwall-production.up.railway.app/api/useful-posts/search?query=${encodeURIComponent(searchQuery)}&page=${page}&limit=20&sortBy=${sortBy}`;
       } else {
         // Use regular endpoint if no search query
-        url = `http://localhost:5000/api/useful-posts?page=${page}&limit=20&sortBy=${sortBy}`;
+        url = `https://urwall-production.up.railway.app/api/useful-posts?page=${page}&limit=20&sortBy=${sortBy}`;
       }
       
       const response = await fetch(url);
@@ -55,7 +55,7 @@ export default function UsefulPosts({ user, onPostClick, onBack }) {
       setLoadingUserPosts(true);
       const token = localStorage.getItem('token');
       const response = await fetch(
-        `http://localhost:5000/api/users/${user.id}/posts`,
+        `https://urwall-production.up.railway.app/api/users/${user.id}/posts`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,

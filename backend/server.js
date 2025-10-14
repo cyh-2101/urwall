@@ -89,6 +89,13 @@ console.log('DB_PASSWORD:', process.env.DB_PASSWORD ? '***exists***' : 'MISSING'
 console.log('===================================');
 const express = require('express');
 const cors = require('cors');
+app.use(cors({
+  origin: [
+    'http://localhost:3000',
+    'https://urwall.vercel.app'  // 替换为你的 Vercel URL
+  ],
+  credentials: true
+}));
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');

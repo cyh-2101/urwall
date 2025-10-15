@@ -37,9 +37,9 @@ export default function Homepage({ user, onLogout }) {
   const categories = ['General', 'Housing', 'Course', 'Events', 'Buy/Sell', 'Jobs', 'Other'];
 
   // Fetch posts when sort or category changes
-useEffect(() => {
-  fetchPosts();
-}, [sortBy, selectedCategory, searchQuery]);
+  useEffect(() => {
+    fetchPosts();
+  }, [sortBy, selectedCategory, searchQuery]);
 
   // Check if user is a manager
   useEffect(() => {
@@ -66,33 +66,33 @@ useEffect(() => {
     }
   };
 
-const fetchPosts = async () => {
-  setLoading(true);
-  try {
-    let url;
-    if (searchQuery.trim()) {
-      // Use search endpoint if there's a search query
-      url = `https://urwall-production-7ba9.up.railway.app/api/posts/search?query=${encodeURIComponent(searchQuery)}&sortBy=${sortBy}`;
-      if (selectedCategory) {
-        url += `&category=${selectedCategory}`;
+  const fetchPosts = async () => {
+    setLoading(true);
+    try {
+      let url;
+      if (searchQuery.trim()) {
+        // Use search endpoint if there's a search query
+        url = `https://urwall-production-7ba9.up.railway.app/api/posts/search?query=${encodeURIComponent(searchQuery)}&sortBy=${sortBy}`;
+        if (selectedCategory) {
+          url += `&category=${selectedCategory}`;
+        }
+      } else {
+        // Use regular endpoint if no search query
+        url = `https://urwall-production-7ba9.up.railway.app/api/posts?sortBy=${sortBy}`;
+        if (selectedCategory) {
+          url += `&category=${selectedCategory}`;
+        }
       }
-    } else {
-      // Use regular endpoint if no search query
-      url = `https://urwall-production-7ba9.up.railway.app/api/posts?sortBy=${sortBy}`;
-      if (selectedCategory) {
-        url += `&category=${selectedCategory}`;
-      }
+      
+      const response = await fetch(url);
+      const data = await response.json();
+      setPosts(data.posts);
+    } catch (error) {
+      console.error('Error fetching posts:', error);
+    } finally {
+      setLoading(false);
     }
-    
-    const response = await fetch(url);
-    const data = await response.json();
-    setPosts(data.posts);
-  } catch (error) {
-    console.error('Error fetching posts:', error);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const handleCreatePost = async (e) => {
     e.preventDefault();
@@ -139,13 +139,20 @@ const fetchPosts = async () => {
     }
   };
 
-  const handleViewProfile = () => {
-    setSelectedUserId(user.id);
+  // 🔥 修改：让它接收 userId 参数
+  const handleViewProfile = (userId = null) => {
+    // 如果没有传入 userId，就查看当前用户自己的个人资料
+    setSelectedUserId(userId || user.id);
+    // 清除帖子详情页面，确保显示个人资料
+    setSelectedPostId(null);
   };
 
+  // 🔥 修改：添加清除 selectedUserId
   const handlePostClick = (postId, fromView = null) => {
     setPreviousView(fromView);
     setSelectedPostId(postId);
+    // 清除个人资料页面，确保显示帖子详情
+    setSelectedUserId(null);
   };
 
   const handleBackFromPostDetail = () => {
@@ -186,12 +193,14 @@ const fetchPosts = async () => {
   }
 
   // Conditional rendering for Post Detail
+  // 🔥 修改：添加 onViewProfile prop
   if (selectedPostId) {
     return (
       <PostDetail 
         postId={selectedPostId} 
         onBack={handleBackFromPostDetail} 
-        user={user} 
+        user={user}
+        onViewProfile={handleViewProfile}
       />
     );
   }
@@ -216,9 +225,10 @@ const fetchPosts = async () => {
       <nav className="navbar">
         <h1>UIUC Wall</h1>
         <div className="nav-right">
+          {/* 🔥 修改：改成箭头函数调用 */}
           <span 
             className="username-link" 
-            onClick={handleViewProfile}
+            onClick={() => handleViewProfile()}
             style={{ cursor: 'pointer', textDecoration: 'underline' }}
           >
             Welcome, {user.username}!

@@ -666,10 +666,10 @@ app.get('/api/posts/:id/comments', async (req, res) => {
       [id]
     );
 
-    // Clean up the response
+    // 清理返回数据
     const comments = result.rows.map(comment => {
       if (comment.is_anonymous) {
-        // Remove user_id for anonymous comments
+        // 匿名评论移除 user_id
         const { user_id, ...rest } = comment;
         return rest;
       }

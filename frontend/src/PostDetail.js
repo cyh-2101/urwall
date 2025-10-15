@@ -292,15 +292,27 @@ export default function PostDetail({ postId, onBack, user, onViewProfile }) {
       <div className="post-detail-card">
         <div className="post-detail-header">
           <div className="post-detail-author">
-            {post.author_avatar && post.user_id && (
-              <img 
-                src={post.author_avatar} 
-                alt={post.author} 
-                className="author-avatar clickable"
-                onClick={() => handleAvatarClick(post.user_id)}
-                onError={(e) => { e.target.style.display = 'none'; }}
-              />
-            )}
+            {post.user_id ? (
+              post.author_avatar ? (
+                <img 
+                  src={post.author_avatar} 
+                  alt={post.author} 
+                  className="author-avatar clickable"
+                  onClick={() => handleAvatarClick(post.user_id)}
+                  onError={(e) => { 
+                    e.target.onerror = null;
+                    e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(post.author || 'User')}&background=13294b&color=fff&size=40`;
+                  }}
+                />
+              ) : (
+                <img 
+                  src={`https://ui-avatars.com/api/?name=${encodeURIComponent(post.author || 'User')}&background=13294b&color=fff&size=40`}
+                  alt={post.author} 
+                  className="author-avatar clickable"
+                  onClick={() => handleAvatarClick(post.user_id)}
+                />
+              )
+            ) : null}
             <strong 
               className={post.user_id ? "clickable-username" : ""}
               onClick={() => post.user_id && handleAvatarClick(post.user_id)}

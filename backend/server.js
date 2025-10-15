@@ -5,7 +5,7 @@ const cors = require('cors');
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const nodemailer = require('nodemailer');
+const sgMail = require('@sendgrid/mail');
 
 // ============================================
 // Express 初始化
@@ -37,15 +37,17 @@ const pool = new Pool({
 // ============================================
 // Email 配置
 // ============================================
-const transporter = nodemailer.createTransport({
-  host: 'smtp.sendgrid.net',
-  port: 587,
-  secure: false,
-  auth: {
-    user: 'apikey',  // 固定写 'apikey'
-    pass: process.env.SENDGRID_API_KEY
-  }
-});
+// const transporter = nodemailer.createTransport({
+//   host: 'smtp.sendgrid.net',
+//   port: 587,
+//   secure: false,
+//   auth: {
+//     user: 'apikey',  // 固定写 'apikey'
+//     pass: process.env.SENDGRID_API_KEY
+//   }
+// });
+
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 // ============================================
 // 工具函数
@@ -55,22 +57,30 @@ function generateVerificationCode() {
 }
 
 async function sendVerificationEmail(email, code) {
-  const mailOptions = {
+  console.log('=== Attempting to send email ===');
+  console.log('To:', email);
+  console.log('Code:', code);
+  console.log('SENDGRID_API_KEY exists:', !!process.env.SENDGRID_API_KEY);
+  
+  const msg = {
+    to: email,
     from: 'recoltee0525@gmail.com',  
-        to: email,
-        subject: 'UIUC Wall - Verification Code',
-        html: `
-          <h2>Campus Wall Verification</h2>
-          <p>Your verification code is: <strong>${code}</strong></p>
-          <p>This code will expire in 10 minutes.</p>
-        `,
+    subject: 'UIUC Wall - Verification Code',
+    html: `
+      <h2>Campus Wall Verification</h2>
+      <p>Your verification code is: <strong>${code}</strong></p>
+      <p>This code will expire in 10 minutes.</p>
+    `,
   };
 
   try {
-    await transporter.sendMail(mailOptions);
-    console.log('Email sent to:', email);
+    await sgMail.send(msg);
+    console.log('✅ Email sent successfully to:', email);
   } catch (error) {
-    console.error('Error sending email:', error);
+    console.error('❌ Error sending email:', error);
+    if (error.response) {
+      console.error('SendGrid error body:', error.response.body);
+    }
     throw error;
   }
 }

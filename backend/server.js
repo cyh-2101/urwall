@@ -172,18 +172,26 @@ async function initializeDatabase() {
       CREATE INDEX IF NOT EXISTS idx_transfer_requests_status ON transfer_requests(status);
     `);
 
-    // 如果 is_pinned 列不存在，添加它
-    await pool.query(`
-      DO $$ 
-      BEGIN 
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns 
-          WHERE table_name='posts' AND column_name='is_pinned'
-        ) THEN
-          ALTER TABLE posts ADD COLUMN is_pinned BOOLEAN DEFAULT FALSE;
-        END IF;
-      END $$;
-    `);
+
+// 添加 is_pinned 列（如果不存在）
+    try {
+      await pool.query(`
+        ALTER TABLE posts ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN DEFAULT FALSE
+      `);
+      console.log('✅ is_pinned column added or already exists');
+    } catch (error) {
+      console.log('⚠️ is_pinned column may already exist:', error.message);
+    }
+
+    // 创建索引
+    try {
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_posts_pinned ON posts(is_pinned)
+      `);
+      console.log('✅ idx_posts_pinned index created');
+    } catch (error) {
+      console.log('⚠️ idx_posts_pinned index may already exist:', error.message);
+    }
 
     await pool.query(`
       INSERT INTO managers (email) 

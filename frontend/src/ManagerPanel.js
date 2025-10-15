@@ -69,6 +69,45 @@ export default function ManagerPanel({ user, onBack }) {
     }
   };
 
+  // 🔥 新增：置顶/取消置顶帖子
+  const handleTogglePin = async (postId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(
+        `https://urwall-production-7ba9.up.railway.app/api/manager/posts/${postId}/pin`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        alert(data.message);
+        
+        // 更新本地状态
+        setAllPosts(prevPosts =>
+          prevPosts.map(post =>
+            post.id === postId ? { ...post, is_pinned: !post.is_pinned } : post
+          )
+        );
+        
+        // 更新选中的帖子状态
+        if (selectedPost && selectedPost.id === postId) {
+          setSelectedPost(prev => ({ ...prev, is_pinned: !prev.is_pinned }));
+        }
+      } else {
+        const error = await response.json();
+        alert(error.message || 'Failed to toggle pin status');
+      }
+    } catch (error) {
+      console.error('Error toggling pin:', error);
+      alert('Network error');
+    }
+  };
+
   const handleDeletePost = async (postId) => {
     try {
       const token = localStorage.getItem('token');
@@ -191,13 +230,17 @@ export default function ManagerPanel({ user, onBack }) {
               allPosts.map((post) => (
                 <div
                   key={post.id}
-                  className="manager-post-card"
+                  className={`manager-post-card ${post.is_pinned ? 'pinned-post-manager' : ''}`}
                   onClick={() => setSelectedPost(post)}
                 >
                   <div className="post-header">
                     <span className="post-category">{post.category}</span>
                     {post.is_anonymous && (
                       <span className="anonymous-badge">Posted Anonymously</span>
+                    )}
+                    {/* 🔥 显示置顶标签 */}
+                    {post.is_pinned && (
+                      <span className="pinned-badge-manager">📌 Pinned</span>
                     )}
                   </div>
 
@@ -344,9 +387,24 @@ export default function ManagerPanel({ user, onBack }) {
               <div className="modal-value">{formatDate(selectedPost.created_at)}</div>
             </div>
 
+            {/* 🔥 显示置顶状态 */}
+            <div className="modal-section">
+              <div className="modal-label">Pinned Status:</div>
+              <div className="modal-value">
+                {selectedPost.is_pinned ? '📌 This post is pinned' : 'Not pinned'}
+              </div>
+            </div>
+
             <div className="modal-actions">
               {!showDeleteConfirm ? (
                 <>
+                  {/* 🔥 置顶/取消置顶按钮 */}
+                  <button
+                    onClick={() => handleTogglePin(selectedPost.id)}
+                    className="pin-btn"
+                  >
+                    {selectedPost.is_pinned ? '📌 Unpin Post' : '📌 Pin Post'}
+                  </button>
                   <button
                     onClick={() => setShowDeleteConfirm(true)}
                     className="delete-btn"

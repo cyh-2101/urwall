@@ -400,3 +400,37 @@
   background: #f0f0f0;
   color: #333;
 }
+
+.pinned-post {
+  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%) !important;
+  border-left: 4px solid #13294b !important;
+  position: relative;
+}
+
+.pinned-post::before {
+  content: '📌';
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font-size: 24px;
+  opacity: 0.3;
+}
+
+.pinned-post:hover {
+  background: linear-gradient(135deg, #bbdefb 0%, #90caf9 100%) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(19, 41, 75, 0.2) !important;
+}
+
+.pinned-badge {
+  background: #13294b;
+  color: white;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-left: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}

@@ -38,16 +38,14 @@ export default function Homepage({ user, onLogout }) {
 
   // Fetch posts when sort or category changes
   useEffect(() => {
-    // 🔥 当筛选条件改变时，显示 loading
-    setLoading(true);
-    fetchPosts();
+    fetchPosts(true);
   }, [sortBy, selectedCategory, searchQuery]);
 
-  // 🔥 新增：自动刷新帖子 - 每5秒刷新一次
+  // 🔥 自动刷新帖子 - 每5秒刷新一次，不显示 loading
   useEffect(() => {
     // 设置定时器，每5秒自动刷新帖子
     const refreshInterval = setInterval(() => {
-      fetchPosts();
+      fetchPosts(false); // 传入 false，不显示 loading
     }, 5000); // 5000ms = 5秒
 
     // 清理函数：组件卸载时清除定时器
@@ -127,11 +125,25 @@ export default function Homepage({ user, onLogout }) {
       });
 
       if (response.ok) {
+        const data = await response.json();
+        
+        // 🔥 显示剩余发帖配额
+        if (data.remainingPosts !== undefined) {
+          alert(`Post created successfully! You can post ${data.remainingPosts} more times this hour.`);
+        }
+        
         setNewPost({ title: '', content: '', category: 'General', isAnonymous: false });
         setShowCreatePost(false);
-        fetchPosts();
+        fetchPosts(false);
       } else {
-        alert('Failed to create post');
+        const errorData = await response.json();
+        
+        // 🔥 处理发帖限制错误
+        if (response.status === 429) {
+          alert(errorData.message || 'You have reached the posting limit. Maximum 10 posts per hour.');
+        } else {
+          alert(errorData.message || 'Failed to create post');
+        }
       }
     } catch (error) {
       console.error('Error creating post:', error);
@@ -151,7 +163,7 @@ export default function Homepage({ user, onLogout }) {
       });
 
       if (response.ok) {
-        fetchPosts();
+        fetchPosts(false);
       }
     } catch (error) {
       console.error('Error liking post:', error);
@@ -212,7 +224,7 @@ export default function Homepage({ user, onLogout }) {
   }
 
   // Conditional rendering for Post Detail
-  // 🔥 修改：添加 onViewProfile prop
+  // 🔥 添加 onViewProfile prop
   if (selectedPostId) {
     return (
       <PostDetail 
@@ -244,7 +256,7 @@ export default function Homepage({ user, onLogout }) {
       <nav className="navbar">
         <h1>UIUC Wall</h1>
         <div className="nav-right">
-          {/* 🔥 修改：改成箭头函数调用 */}
+          {/* 🔥 改成箭头函数调用 */}
           <span 
             className="username-link" 
             onClick={() => handleViewProfile()}
@@ -382,6 +394,7 @@ export default function Homepage({ user, onLogout }) {
               </div>
             </div>
           )}
+          
           {/* Posts List */}
           {loading ? (
             <div className="loading">Loading posts...</div>
@@ -391,7 +404,7 @@ export default function Homepage({ user, onLogout }) {
             posts.map((post) => (
               <div 
                 key={post.id} 
-                className="post-card"
+                className={`post-card ${post.is_pinned ? 'pinned-post' : ''}`}
                 onClick={() => handlePostClick(post.id)}
                 style={{ cursor: 'pointer' }}
               >
@@ -399,6 +412,10 @@ export default function Homepage({ user, onLogout }) {
                   <div className="post-author">
                     <strong>{post.author}</strong>
                     <span className="post-category">{post.category}</span>
+                    {/* 🔥 显示置顶标签 */}
+                    {post.is_pinned && (
+                      <span className="pinned-badge">📌 Pinned</span>
+                    )}
                   </div>
                   <span className="post-time">{formatDate(post.created_at)}</span>
                 </div>

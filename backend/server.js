@@ -118,6 +118,7 @@ async function initializeDatabase() {
         content TEXT NOT NULL,
         category VARCHAR(100) NOT NULL,
         is_anonymous BOOLEAN DEFAULT FALSE,
+        is_pinned BOOLEAN DEFAULT FALSE,
         likes_count INTEGER DEFAULT 0,
         comments_count INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -165,9 +166,23 @@ async function initializeDatabase() {
 
       CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_posts_category ON posts(category);
+      CREATE INDEX IF NOT EXISTS idx_posts_pinned ON posts(is_pinned);
       CREATE INDEX IF NOT EXISTS idx_comments_post_id ON comments(post_id);
       CREATE INDEX IF NOT EXISTS idx_likes_post_id ON likes(post_id);
       CREATE INDEX IF NOT EXISTS idx_transfer_requests_status ON transfer_requests(status);
+    `);
+
+    // 如果 is_pinned 列不存在，添加它
+    await pool.query(`
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name='posts' AND column_name='is_pinned'
+        ) THEN
+          ALTER TABLE posts ADD COLUMN is_pinned BOOLEAN DEFAULT FALSE;
+        END IF;
+      END $$;
     `);
 
     await pool.query(`
@@ -440,6 +455,22 @@ app.post('/api/posts', authenticateToken, async (req, res) => {
   }
 
   try {
+    // 🔥 检查用户在过去1小时内发了多少帖子
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const recentPostsResult = await pool.query(
+      'SELECT COUNT(*) FROM posts WHERE user_id = $1 AND created_at > $2',
+      [req.user.id, oneHourAgo]
+    );
+
+    const recentPostsCount = parseInt(recentPostsResult.rows[0].count);
+
+    if (recentPostsCount >= 10) {
+      return res.status(429).json({ 
+        message: 'You have reached the posting limit. Maximum 10 posts per hour.',
+        remainingTime: Math.ceil((60 - (Date.now() - oneHourAgo.getTime()) / 1000 / 60))
+      });
+    }
+
     const result = await pool.query(
       'INSERT INTO posts (user_id, title, content, category, is_anonymous) VALUES ($1, $2, $3, $4, $5) RETURNING *',
       [req.user.id, title, content, category, isAnonymous || false]
@@ -448,12 +479,14 @@ app.post('/api/posts', authenticateToken, async (req, res) => {
     res.status(201).json({
       message: 'Post created successfully',
       post: result.rows[0],
+      remainingPosts: 10 - recentPostsCount - 1
     });
   } catch (error) {
     console.error('Error creating post:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 });
+
 
 app.get('/api/posts', async (req, res) => {
   const { page = 1, limit = 20, sortBy = 'created_at', category } = req.query;
@@ -467,6 +500,7 @@ app.get('/api/posts', async (req, res) => {
         p.content, 
         p.category, 
         p.is_anonymous,
+        p.is_pinned,
         p.likes_count,
         p.comments_count,
         p.created_at,
@@ -481,12 +515,15 @@ app.get('/api/posts', async (req, res) => {
       params.push(category);
     }
 
+    // 🔥 置顶帖子永远在最前面
+    query += ' ORDER BY p.is_pinned DESC, ';
+
     if (sortBy === 'likes') {
-      query += ' ORDER BY p.likes_count DESC, p.created_at DESC';
+      query += 'p.likes_count DESC, p.created_at DESC';
     } else if (sortBy === 'comments') {
-      query += ' ORDER BY p.comments_count DESC, p.created_at DESC';
+      query += 'p.comments_count DESC, p.created_at DESC';
     } else {
-      query += ' ORDER BY p.created_at DESC';
+      query += 'p.created_at DESC';
     }
 
     query += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
@@ -514,6 +551,7 @@ app.get('/api/posts', async (req, res) => {
   }
 });
 
+
 app.get('/api/posts/search', async (req, res) => {
   const { query, page = 1, limit = 20, sortBy = 'relevance', category } = req.query;
   const offset = (page - 1) * limit;
@@ -532,6 +570,7 @@ app.get('/api/posts/search', async (req, res) => {
         p.content, 
         p.category, 
         p.is_anonymous,
+        p.is_pinned,
         p.likes_count,
         p.comments_count,
         p.created_at,
@@ -556,12 +595,15 @@ app.get('/api/posts/search', async (req, res) => {
       params.push(category);
     }
 
+    // 🔥 置顶帖子永远在最前面
+    sqlQuery += ' ORDER BY p.is_pinned DESC, ';
+
     if (sortBy === 'likes') {
-      sqlQuery += ' ORDER BY p.likes_count DESC, p.created_at DESC';
+      sqlQuery += 'p.likes_count DESC, p.created_at DESC';
     } else if (sortBy === 'comments') {
-      sqlQuery += ' ORDER BY p.comments_count DESC, p.created_at DESC';
+      sqlQuery += 'p.comments_count DESC, p.created_at DESC';
     } else {
-      sqlQuery += ' ORDER BY p.created_at DESC';
+      sqlQuery += 'p.created_at DESC';
     }
 
     sqlQuery += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
@@ -641,6 +683,38 @@ app.get('/api/posts/:id', async (req, res) => {
     res.json(postData);
   } catch (error) {
     console.error('Error fetching post:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+//manager pin post
+app.post('/api/manager/posts/:id/pin', authenticateManager, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const postResult = await pool.query(
+      'SELECT * FROM posts WHERE id = $1',
+      [id]
+    );
+
+    if (postResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    const currentPinStatus = postResult.rows[0].is_pinned;
+
+    // 切换置顶状态
+    const result = await pool.query(
+      'UPDATE posts SET is_pinned = $1 WHERE id = $2 RETURNING *',
+      [!currentPinStatus, id]
+    );
+
+    res.json({
+      message: currentPinStatus ? 'Post unpinned successfully' : 'Post pinned successfully',
+      post: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Error toggling pin status:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 });

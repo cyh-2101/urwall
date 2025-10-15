@@ -5,12 +5,18 @@ export default function UserProfile({ userId, currentUser, onBack, onPostClick }
   const [profile, setProfile] = useState(null);
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('posts'); // posts or comments
+  const [activeTab, setActiveTab] = useState('posts');
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({
     username: '',
     bio: '',
     avatar_url: ''
+  });
+  const [editingPostId, setEditingPostId] = useState(null);
+  const [editPostForm, setEditPostForm] = useState({
+    title: '',
+    content: '',
+    category: ''
   });
 
   const isOwnProfile = currentUser && currentUser.id === parseInt(userId);
@@ -22,7 +28,16 @@ export default function UserProfile({ userId, currentUser, onBack, onPostClick }
 
   const fetchUserProfile = async () => {
     try {
-      const response = await fetch(`https://urwall-production-7ba9.up.railway.app/api/users/${userId}`);
+      const token = localStorage.getItem('token');
+      const headers = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      const response = await fetch(`https://urwall-production-7ba9.up.railway.app/api/users/${userId}`, {
+        headers: headers
+      });
+      
       if (response.ok) {
         const data = await response.json();
         setProfile(data);
@@ -41,26 +56,26 @@ export default function UserProfile({ userId, currentUser, onBack, onPostClick }
     }
   };
 
-const fetchUserPosts = async () => {
-  try {
-    const token = localStorage.getItem('token');
-    const headers = {};
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+  const fetchUserPosts = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const headers = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      const response = await fetch(`https://urwall-production-7ba9.up.railway.app/api/users/${userId}/posts`, {
+        headers: headers
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setPosts(data);
+      }
+    } catch (error) {
+      console.error('Error fetching user posts:', error);
     }
-    
-    const response = await fetch(`https://urwall-production-7ba9.up.railway.app/api/users/${userId}/posts`, {
-      headers: headers
-    });
-    
-    if (response.ok) {
-      const data = await response.json();
-      setPosts(data);
-    }
-  } catch (error) {
-    console.error('Error fetching user posts:', error);
-  }
-};
+  };
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
@@ -85,6 +100,68 @@ const fetchUserPosts = async () => {
       }
     } catch (error) {
       console.error('Error updating profile:', error);
+      alert('网络错误');
+    }
+  };
+
+  const handleDeletePost = async (postId) => {
+    if (!window.confirm('确定要删除这篇帖子吗？此操作无法撤销。')) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`https://urwall-production-7ba9.up.railway.app/api/posts/${postId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        alert('帖子删除成功！');
+        fetchUserPosts();
+      } else {
+        const error = await response.json();
+        alert(error.message || '删除失败');
+      }
+    } catch (error) {
+      console.error('Error deleting post:', error);
+      alert('网络错误');
+    }
+  };
+
+  const handleEditPost = (post) => {
+    setEditingPostId(post.id);
+    setEditPostForm({
+      title: post.title,
+      content: post.content,
+      category: post.category
+    });
+  };
+
+  const handleUpdatePost = async (postId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`https://urwall-production-7ba9.up.railway.app/api/posts/${postId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(editPostForm)
+      });
+
+      if (response.ok) {
+        alert('帖子更新成功！');
+        setEditingPostId(null);
+        fetchUserPosts();
+      } else {
+        const error = await response.json();
+        alert(error.message || '更新失败');
+      }
+    } catch (error) {
+      console.error('Error updating post:', error);
       alert('网络错误');
     }
   };
@@ -114,6 +191,90 @@ const fetchUserPosts = async () => {
     );
   }
 
+  const renderPost = (post) => {
+    if (editingPostId === post.id) {
+      return (
+        <div key={post.id} className="post-card editing">
+          <div className="edit-post-form">
+            <input
+              type="text"
+              value={editPostForm.title}
+              onChange={(e) => setEditPostForm({...editPostForm, title: e.target.value})}
+              placeholder="标题"
+              className="edit-post-input"
+            />
+            <select
+              value={editPostForm.category}
+              onChange={(e) => setEditPostForm({...editPostForm, category: e.target.value})}
+              className="edit-post-select"
+            >
+              <option value="Academics">Academics</option>
+              <option value="Campus Life">Campus Life</option>
+              <option value="Career">Career</option>
+              <option value="Social">Social</option>
+              <option value="Other">Other</option>
+            </select>
+            <textarea
+              value={editPostForm.content}
+              onChange={(e) => setEditPostForm({...editPostForm, content: e.target.value})}
+              placeholder="内容"
+              className="edit-post-textarea"
+              rows="6"
+            />
+            <div className="edit-post-actions">
+              <button onClick={() => handleUpdatePost(post.id)} className="save-edit-btn">
+                保存
+              </button>
+              <button onClick={() => setEditingPostId(null)} className="cancel-edit-btn">
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div key={post.id} className="post-card">
+        <div className="post-content" onClick={() => onPostClick(post.id)}>
+          <div className="post-header">
+            <span className="post-category">{post.category}</span>
+            {post.is_anonymous && <span className="anonymous-badge">匿名发布</span>}
+            <span className="post-time">{formatDate(post.created_at)}</span>
+          </div>
+          <h3 className="post-title">{post.title}</h3>
+          <p className="post-preview">{post.content}</p>
+          <div className="post-stats">
+            <span>❤️ {post.likes_count}</span>
+            <span>💬 {post.comments_count}</span>
+          </div>
+        </div>
+        {isOwnProfile && (
+          <div className="post-actions">
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                handleEditPost(post);
+              }} 
+              className="edit-post-btn"
+            >
+              ✏️ 编辑
+            </button>
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDeletePost(post.id);
+              }} 
+              className="delete-post-btn"
+            >
+              🗑️ 删除
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="user-profile-container">
       <button onClick={onBack} className="back-btn">← 返回首页</button>
@@ -139,7 +300,9 @@ const fetchUserPosts = async () => {
           
           <div className="profile-details">
             <h1>{profile.username}</h1>
-            <p className="profile-email">{profile.email}</p>
+            {profile.email && (
+              <p className="profile-email">{profile.email}</p>
+            )}
             <p className="profile-bio">{profile.bio || '这个用户还没有填写简介'}</p>
             <p className="member-since">加入时间: {new Date(profile.created_at).toLocaleDateString()}</p>
             
@@ -232,24 +395,7 @@ const fetchUserPosts = async () => {
               {posts.filter(p => !p.is_anonymous).length === 0 ? (
                 <div className="no-posts">还没有发布任何帖子</div>
               ) : (
-                posts.filter(p => !p.is_anonymous).map(post => (
-                  <div 
-                    key={post.id} 
-                    className="post-card"
-                    onClick={() => onPostClick(post.id)}
-                  >
-                    <div className="post-header">
-                      <span className="post-category">{post.category}</span>
-                      <span className="post-time">{formatDate(post.created_at)}</span>
-                    </div>
-                    <h3 className="post-title">{post.title}</h3>
-                    <p className="post-preview">{post.content}</p>
-                    <div className="post-stats">
-                      <span>❤️ {post.likes_count}</span>
-                      <span>💬 {post.comments_count}</span>
-                    </div>
-                  </div>
-                ))
+                posts.filter(p => !p.is_anonymous).map(post => renderPost(post))
               )}
             </>
           )}
@@ -259,25 +405,7 @@ const fetchUserPosts = async () => {
               {posts.filter(p => p.is_anonymous).length === 0 ? (
                 <div className="no-posts">没有匿名帖子</div>
               ) : (
-                posts.filter(p => p.is_anonymous).map(post => (
-                  <div 
-                    key={post.id} 
-                    className="post-card anonymous-post"
-                    onClick={() => onPostClick(post.id)}
-                  >
-                    <div className="post-header">
-                      <span className="anonymous-badge">匿名发布</span>
-                      <span className="post-category">{post.category}</span>
-                      <span className="post-time">{formatDate(post.created_at)}</span>
-                    </div>
-                    <h3 className="post-title">{post.title}</h3>
-                    <p className="post-preview">{post.content}</p>
-                    <div className="post-stats">
-                      <span>❤️ {post.likes_count}</span>
-                      <span>💬 {post.comments_count}</span>
-                    </div>
-                  </div>
-                ))
+                posts.filter(p => p.is_anonymous).map(post => renderPost(post))
               )}
             </>
           )}

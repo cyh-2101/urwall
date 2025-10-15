@@ -789,6 +789,83 @@ app.post('/api/posts/:id/like', authenticateToken, async (req, res) => {
   }
 });
 
+// UPDATE POST - Allow users to edit their own posts
+app.put('/api/posts/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { title, content, category } = req.body;
+
+  if (!title || !content || !category) {
+    return res.status(400).json({ message: 'Title, content, and category are required' });
+  }
+
+  try {
+    // Check if post exists and belongs to user
+    const postCheck = await pool.query(
+      'SELECT * FROM posts WHERE id = $1',
+      [id]
+    );
+
+    if (postCheck.rows.length === 0) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    const post = postCheck.rows[0];
+
+    // Only the post author can edit their post
+    if (post.user_id !== req.user.id) {
+      return res.status(403).json({ message: 'You can only edit your own posts' });
+    }
+
+    // Update the post
+    const result = await pool.query(
+      `UPDATE posts 
+       SET title = $1, content = $2, category = $3
+       WHERE id = $4
+       RETURNING *`,
+      [title, content, category, id]
+    );
+
+    res.json({
+      message: 'Post updated successfully',
+      post: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Error updating post:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// DELETE POST - Allow users to delete their own posts
+app.delete('/api/posts/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Check if post exists
+    const postCheck = await pool.query(
+      'SELECT * FROM posts WHERE id = $1',
+      [id]
+    );
+
+    if (postCheck.rows.length === 0) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    const post = postCheck.rows[0];
+
+    // Only the post author can delete their post
+    if (post.user_id !== req.user.id) {
+      return res.status(403).json({ message: 'You can only delete your own posts' });
+    }
+
+    // Delete the post (CASCADE will handle comments, likes, etc.)
+    await pool.query('DELETE FROM posts WHERE id = $1', [id]);
+
+    res.json({ message: 'Post deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting post:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
 // ============================================
 // 评论路由
 // ============================================
@@ -905,6 +982,20 @@ app.get('/api/users/:id', async (req, res) => {
   const { id } = req.params;
 
   try {
+    // Check if the requesting user is viewing their own profile
+    let requestingUserId = null;
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        requestingUserId = decoded.id;
+      } catch (err) {
+        // Token invalid, continue as guest
+      }
+    }
+
     const userResult = await pool.query(
       `SELECT 
         u.id,
@@ -925,7 +1016,14 @@ app.get('/api/users/:id', async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    res.json(userResult.rows[0]);
+    const userData = userResult.rows[0];
+    
+    // Only include email if viewing own profile
+    if (!requestingUserId || requestingUserId !== parseInt(id)) {
+      delete userData.email;
+    }
+
+    res.json(userData);
   } catch (error) {
     console.error('Error fetching user profile:', error);
     res.status(500).json({ message: 'Internal server error' });

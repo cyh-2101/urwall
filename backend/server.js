@@ -15,9 +15,11 @@ const app = express();
 app.use(cors({
   origin: [
     'http://localhost:3000',
-    'https://urwall.vercel.app'
+    'https://urwall.vercel.app',
   ],
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],  // 明确允许的方法
+  allowedHeaders: ['Content-Type', 'Authorization']  // 允许的请求头
 }));
 
 app.use(express.json());

@@ -102,11 +102,25 @@ export default function Homepage({ user, onLogout }) {
       }
       
       const response = await fetch(url);
+      
+      if (!response.ok) {
+        console.error('Failed to fetch posts:', response.status);
+        setLoading(false);
+        return;
+      }
+      
       const data = await response.json();
-      setPosts(data.posts);
+      
+      if (data && data.posts) {
+        setPosts(data.posts);
+      } else {
+        setPosts([]);
+      }
+      
       setLoading(false);
     } catch (error) {
       console.error('Error fetching posts:', error);
+      setPosts([]);
       setLoading(false);
     }
   };

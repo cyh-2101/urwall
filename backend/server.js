@@ -603,6 +603,7 @@ app.get('/api/posts/search', async (req, res) => {
   }
 });
 
+// Update the GET /api/posts/:id endpoint
 app.get('/api/posts/:id', async (req, res) => {
   const { id } = req.params;
 
@@ -618,7 +619,8 @@ app.get('/api/posts/:id', async (req, res) => {
         p.comments_count,
         p.created_at,
         p.user_id,
-        CASE WHEN p.is_anonymous THEN 'Anonymous' ELSE u.username END as author
+        CASE WHEN p.is_anonymous THEN 'Anonymous' ELSE u.username END as author,
+        CASE WHEN p.is_anonymous THEN NULL ELSE u.avatar_url END as author_avatar
       FROM posts p
       LEFT JOIN users u ON p.user_id = u.id
       WHERE p.id = $1`,
@@ -630,24 +632,53 @@ app.get('/api/posts/:id', async (req, res) => {
     }
 
     let postData = result.rows[0];
-    if (!postData.is_anonymous && postData.user_id) {
-      try {
-        const userResult = await pool.query(
-          'SELECT avatar_url FROM users WHERE id = $1',
-          [postData.user_id]
-        );
-        if (userResult.rows.length > 0) {
-          postData.author_avatar = userResult.rows[0].avatar_url;
-        }
-      } catch (err) {
-        console.log('Avatar column not available');
-      }
+    
+    // Don't expose user_id for anonymous posts
+    if (postData.is_anonymous) {
+      delete postData.user_id;
     }
 
-    delete postData.user_id;
     res.json(postData);
   } catch (error) {
     console.error('Error fetching post:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Update the GET /api/posts/:id/comments endpoint
+app.get('/api/posts/:id/comments', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(
+      `SELECT 
+        c.id,
+        c.content,
+        c.is_anonymous,
+        c.created_at,
+        c.user_id,
+        CASE WHEN c.is_anonymous THEN 'Anonymous' ELSE u.username END as author,
+        CASE WHEN c.is_anonymous THEN NULL ELSE u.avatar_url END as author_avatar
+      FROM comments c
+      LEFT JOIN users u ON c.user_id = u.id
+      WHERE c.post_id = $1
+      ORDER BY c.created_at ASC`,
+      [id]
+    );
+
+    // Clean up the response
+    const comments = result.rows.map(comment => {
+      if (comment.is_anonymous) {
+        // Remove user_id for anonymous comments
+        const { user_id, ...rest } = comment;
+        return rest;
+      }
+      return comment;
+    });
+
+    res.json(comments);
+  } catch (error) {
+    console.error('Error fetching comments:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 });

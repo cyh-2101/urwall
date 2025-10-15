@@ -52,9 +52,9 @@ function generateVerificationCode() {
 
 async function sendVerificationEmail(email, code) {
   const mailOptions = {
-    from: 'noreply@urwall.com',  
+    from: 'recoltee0525@gmail.com',  
         to: email,
-        subject: 'Campus Wall - Verification Code',
+        subject: 'UIUC Wall - Verification Code',
         html: `
           <h2>Campus Wall Verification</h2>
           <p>Your verification code is: <strong>${code}</strong></p>

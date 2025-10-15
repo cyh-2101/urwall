@@ -48,7 +48,7 @@ export default function Auth() {
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch('https://urwall-production.up.railway.app/api/auth/login', {
+      const response = await fetch('urwall-production-7ba9.up.railway.app/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: loginEmail, password: loginPassword })
@@ -76,7 +76,7 @@ export default function Auth() {
       return;
     }
     try {
-      const response = await fetch('https://urwall-production.up.railway.app/api/auth/send-verification', {
+      const response = await fetch('urwall-production-7ba9.up.railway.app/api/auth/send-verification', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: registerEmail, type: 'register' })
@@ -100,7 +100,7 @@ export default function Auth() {
       return;
     }
     try {
-      const response = await fetch('https://urwall-production.up.railway.app/api/auth/register', {
+      const response = await fetch('urwall-production-7ba9.up.railway.app/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -131,7 +131,7 @@ export default function Auth() {
   const handleSendResetCode = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch('https://urwall-production.up.railway.app/api/auth/send-verification', {
+      const response = await fetch('urwall-production-7ba9.up.railway.app/api/auth/send-verification', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: resetEmail, type: 'reset' })
@@ -155,7 +155,7 @@ export default function Auth() {
       return;
     }
     try {
-      const response = await fetch('https://urwall-production.up.railway.app/api/auth/reset-password', {
+      const response = await fetch('urwall-production-7ba9.up.railway.app/api/auth/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

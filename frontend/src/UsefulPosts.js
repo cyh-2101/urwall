@@ -26,10 +26,10 @@ export default function UsefulPosts({ user, onPostClick, onBack }) {
       
       if (searchQuery.trim()) {
         // Use search endpoint if there's a search query
-        url = `https://urwall-production.up.railway.app/api/useful-posts/search?query=${encodeURIComponent(searchQuery)}&page=${page}&limit=20&sortBy=${sortBy}`;
+        url = `urwall-production-7ba9.up.railway.app/api/useful-posts/search?query=${encodeURIComponent(searchQuery)}&page=${page}&limit=20&sortBy=${sortBy}`;
       } else {
         // Use regular endpoint if no search query
-        url = `https://urwall-production.up.railway.app/api/useful-posts?page=${page}&limit=20&sortBy=${sortBy}`;
+        url = `urwall-production-7ba9.up.railway.app/api/useful-posts?page=${page}&limit=20&sortBy=${sortBy}`;
       }
       
       const response = await fetch(url);
@@ -55,7 +55,7 @@ export default function UsefulPosts({ user, onPostClick, onBack }) {
       setLoadingUserPosts(true);
       const token = localStorage.getItem('token');
       const response = await fetch(
-        `https://urwall-production.up.railway.app/api/users/${user.id}/posts`,
+        `urwall-production-7ba9.up.railway.app/api/users/${user.id}/posts`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -98,7 +98,7 @@ export default function UsefulPosts({ user, onPostClick, onBack }) {
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(
-        `https://urwall-production.up.railway.app/api/posts/${selectedPostForTransfer}/request-transfer`,
+        `urwall-production-7ba9.up.railway.app/api/posts/${selectedPostForTransfer}/request-transfer`,
         {
           method: 'POST',
           headers: {

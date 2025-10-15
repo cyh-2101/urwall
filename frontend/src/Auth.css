@@ -94,6 +94,7 @@
 /* Form Styles */
 .auth-form-group {
   margin-bottom: 20px;
+  box-sizing: border-box;
 }
 
 .auth-form-group label {
@@ -114,6 +115,7 @@
   font-size: 14px;
   transition: all 0.3s ease;
   background: #fafafa;
+  box-sizing: border-box;
 }
 
 .auth-form-group input:focus {
@@ -144,6 +146,7 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-top: 10px;
+  box-sizing: border-box;
 }
 
 .auth-btn:hover:not(:disabled) {

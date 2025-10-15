@@ -220,7 +220,7 @@ export default function Auth() {
     <div className="auth-container">
       <div className="auth-card">
         <div className="auth-header">
-          Campus Wall
+          UIUC Wall
         </div>
 
         <div className="auth-tabs">

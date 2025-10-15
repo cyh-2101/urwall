@@ -214,7 +214,7 @@ const fetchPosts = async () => {
   return (
     <div className="home-container">
       <nav className="navbar">
-        <h1>Campus Wall</h1>
+        <h1>UIUC Wall</h1>
         <div className="nav-right">
           <span 
             className="username-link" 

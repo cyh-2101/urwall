@@ -81,7 +81,12 @@ export default function Homepage({ user, onLogout }) {
     }
   };
 
-  const fetchPosts = async () => {
+  const fetchPosts = async (showLoading = false) => {
+    // 🔥 只有明确要求时才显示 loading
+    if (showLoading) {
+      setLoading(true);
+    }
+    
     try {
       let url;
       if (searchQuery.trim()) {
@@ -101,16 +106,10 @@ export default function Homepage({ user, onLogout }) {
       const response = await fetch(url);
       const data = await response.json();
       setPosts(data.posts);
-      
-      // 🔥 只有在第一次加载时设置 loading 为 false
-      if (loading) {
-        setLoading(false);
-      }
+      setLoading(false);
     } catch (error) {
       console.error('Error fetching posts:', error);
-      if (loading) {
-        setLoading(false);
-      }
+      setLoading(false);
     }
   };
 

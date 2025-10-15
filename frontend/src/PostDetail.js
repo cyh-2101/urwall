@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './PostDetail.css';
 
-export default function PostDetail({ postId, onBack, user }) {
+export default function PostDetail({ postId, onBack, user, onViewProfile }) {
   const [post, setPost] = useState(null);
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
@@ -101,6 +101,12 @@ export default function PostDetail({ postId, onBack, user }) {
     }
   };
 
+  const handleAvatarClick = (userId) => {
+    if (userId && onViewProfile) {
+      onViewProfile(userId);
+    }
+  };
+
   const handleReply = (comment) => {
     setReplyingTo(comment);
     setNewComment(`@${comment.author}: `);
@@ -112,7 +118,6 @@ export default function PostDetail({ postId, onBack, user }) {
   };
 
   const handleDeleteComment = async (commentId) => {
-    // Confirm deletion
     if (!window.confirm('Are you sure you want to delete this comment? This action cannot be undone.')) {
       return;
     }
@@ -135,14 +140,12 @@ export default function PostDetail({ postId, onBack, user }) {
       });
 
       if (response.ok) {
-        // Show success message
         const successMsg = document.createElement('div');
         successMsg.textContent = 'Comment deleted successfully!';
         successMsg.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #f44336; color: white; padding: 15px 20px; border-radius: 8px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.15);';
         document.body.appendChild(successMsg);
         setTimeout(() => successMsg.remove(), 3000);
 
-        // Refresh comments and post
         await Promise.all([
           fetchComments(),
           fetchPostDetail()
@@ -243,14 +246,11 @@ export default function PostDetail({ postId, onBack, user }) {
     return date.toLocaleDateString();
   };
 
-  // Helper function to check if current user can delete a comment
   const canDeleteComment = (comment) => {
     if (!user) return false;
-    // User can delete if they are the author (for non-anonymous comments)
     if (!comment.is_anonymous && comment.author === user.username) {
       return true;
     }
-    // For anonymous comments, check user_id if available
     if (comment.is_anonymous && comment.user_id === user.id) {
       return true;
     }
@@ -292,15 +292,21 @@ export default function PostDetail({ postId, onBack, user }) {
       <div className="post-detail-card">
         <div className="post-detail-header">
           <div className="post-detail-author">
-            {post.author_avatar && (
+            {post.author_avatar && post.user_id && (
               <img 
                 src={post.author_avatar} 
                 alt={post.author} 
-                className="author-avatar"
+                className="author-avatar clickable"
+                onClick={() => handleAvatarClick(post.user_id)}
                 onError={(e) => { e.target.style.display = 'none'; }}
               />
             )}
-            <strong>{post.author || 'Anonymous'}</strong>
+            <strong 
+              className={post.user_id ? "clickable-username" : ""}
+              onClick={() => post.user_id && handleAvatarClick(post.user_id)}
+            >
+              {post.author || 'Anonymous'}
+            </strong>
             <span className="post-detail-category">{post.category}</span>
           </div>
           <span className="post-detail-time">{formatDate(post.created_at)}</span>
@@ -376,15 +382,21 @@ export default function PostDetail({ postId, onBack, user }) {
               <div key={comment.id} className="comment-card">
                 <div className="comment-header">
                   <div className="comment-author">
-                    {comment.author_avatar && (
+                    {comment.author_avatar && comment.user_id && (
                       <img 
                         src={comment.author_avatar} 
                         alt={comment.author} 
-                        className="comment-author-avatar"
+                        className="comment-author-avatar clickable"
+                        onClick={() => handleAvatarClick(comment.user_id)}
                         onError={(e) => { e.target.style.display = 'none'; }}
                       />
                     )}
-                    <strong>{comment.author || 'Anonymous'}</strong>
+                    <strong 
+                      className={comment.user_id ? "clickable-username" : ""}
+                      onClick={() => comment.user_id && handleAvatarClick(comment.user_id)}
+                    >
+                      {comment.author || 'Anonymous'}
+                    </strong>
                   </div>
                   <span className="comment-time">{formatDate(comment.created_at)}</span>
                 </div>

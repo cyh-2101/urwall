@@ -46,11 +46,31 @@
   height: 40px;
   border-radius: 50%;
   object-fit: cover;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.author-avatar.clickable {
+  cursor: pointer;
+}
+
+.author-avatar.clickable:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 0 3px rgba(19, 41, 75, 0.2);
 }
 
 .post-detail-author strong {
   color: #13294b;
   font-size: 16px;
+}
+
+.clickable-username {
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.clickable-username:hover {
+  color: #e84a27;
+  text-decoration: underline;
 }
 
 .post-detail-category {
@@ -259,6 +279,16 @@
   height: 30px;
   border-radius: 50%;
   object-fit: cover;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.comment-author-avatar.clickable {
+  cursor: pointer;
+}
+
+.comment-author-avatar.clickable:hover {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 2px rgba(19, 41, 75, 0.2);
 }
 
 .comment-author strong {

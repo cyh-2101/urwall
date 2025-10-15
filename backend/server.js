@@ -480,8 +480,8 @@ app.post('/api/posts', authenticateToken, async (req, res) => {
     }
 
     const result = await pool.query(
-      'INSERT INTO posts (user_id, title, content, category, is_anonymous) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [req.user.id, title, content, category, isAnonymous || false]
+      'INSERT INTO posts (user_id, title, content, category, is_anonymous, is_pinned) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [req.user.id, title, content, category, isAnonymous || false, false]
     );
 
     res.status(201).json({
@@ -524,7 +524,7 @@ app.get('/api/posts', async (req, res) => {
     }
 
     // 🔥 置顶帖子永远在最前面
-    query += ' ORDER BY p.is_pinned DESC, ';
+    query += ' ORDER BY COALESCE(p.is_pinned, false) DESC, ';
 
     if (sortBy === 'likes') {
       query += 'p.likes_count DESC, p.created_at DESC';
@@ -604,7 +604,7 @@ app.get('/api/posts/search', async (req, res) => {
     }
 
     // 🔥 置顶帖子永远在最前面
-    sqlQuery += ' ORDER BY p.is_pinned DESC, ';
+    sqlQuery += ' ORDER BY COALESCE(p.is_pinned, false) DESC, ';
 
     if (sortBy === 'likes') {
       sqlQuery += 'p.likes_count DESC, p.created_at DESC';

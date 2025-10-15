@@ -22,6 +22,8 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']  // 允许的请求头
 }));
 
+app.options('*', cors());
+
 app.use(express.json());
 
 // ============================================

@@ -41,6 +41,19 @@ export default function Homepage({ user, onLogout }) {
     fetchPosts();
   }, [sortBy, selectedCategory, searchQuery]);
 
+  // 🔥 新增：自动刷新帖子 - 每5秒刷新一次
+  useEffect(() => {
+    // 设置定时器，每5秒自动刷新帖子
+    const refreshInterval = setInterval(() => {
+      fetchPosts();
+    }, 5000); // 5000ms = 5秒
+
+    // 清理函数：组件卸载时清除定时器
+    return () => {
+      clearInterval(refreshInterval);
+    };
+  }, [sortBy, selectedCategory, searchQuery]); // 当这些值变化时，重新设置定时器
+
   // Check if user is a manager
   useEffect(() => {
     checkManagerStatus();
@@ -67,7 +80,11 @@ export default function Homepage({ user, onLogout }) {
   };
 
   const fetchPosts = async () => {
-    setLoading(true);
+    // 🔥 修改：只在首次加载时显示 loading，自动刷新时不显示
+    if (posts.length === 0) {
+      setLoading(true);
+    }
+    
     try {
       let url;
       if (searchQuery.trim()) {

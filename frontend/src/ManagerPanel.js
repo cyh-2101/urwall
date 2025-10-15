@@ -101,7 +101,7 @@ export default function ManagerPanel({ user, onBack }) {
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(
-        `http://https://urwall-production.up.railway.app/api/manager/transfer-requests/${requestId}/approve`,
+        `https://urwall-production.up.railway.app/api/manager/transfer-requests/${requestId}/approve`,
         {
           method: 'POST',
           headers: {
@@ -128,7 +128,7 @@ export default function ManagerPanel({ user, onBack }) {
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(
-        `http://https://urwall-production.up.railway.app/api/manager/transfer-requests/${requestId}/reject`,
+        `https://urwall-production.up.railway.app/api/manager/transfer-requests/${requestId}/reject`,
         {
           method: 'POST',
           headers: {

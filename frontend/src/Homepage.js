@@ -38,6 +38,8 @@ export default function Homepage({ user, onLogout }) {
 
   // Fetch posts when sort or category changes
   useEffect(() => {
+    // 🔥 当筛选条件改变时，显示 loading
+    setLoading(true);
     fetchPosts();
   }, [sortBy, selectedCategory, searchQuery]);
 
@@ -80,11 +82,6 @@ export default function Homepage({ user, onLogout }) {
   };
 
   const fetchPosts = async () => {
-    // 🔥 修改：只在首次加载时显示 loading，自动刷新时不显示
-    if (posts.length === 0) {
-      setLoading(true);
-    }
-    
     try {
       let url;
       if (searchQuery.trim()) {
@@ -104,10 +101,16 @@ export default function Homepage({ user, onLogout }) {
       const response = await fetch(url);
       const data = await response.json();
       setPosts(data.posts);
+      
+      // 🔥 只有在第一次加载时设置 loading 为 false
+      if (loading) {
+        setLoading(false);
+      }
     } catch (error) {
       console.error('Error fetching posts:', error);
-    } finally {
-      setLoading(false);
+      if (loading) {
+        setLoading(false);
+      }
     }
   };
 

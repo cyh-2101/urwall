@@ -22,7 +22,7 @@ export default function UserProfile({ userId, currentUser, onBack, onPostClick }
 
   const fetchUserProfile = async () => {
     try {
-      const response = await fetch(`urwall-production-7ba9.up.railway.app/api/users/${userId}`);
+      const response = await fetch(`https://urwall-production-7ba9.up.railway.app/api/users/${userId}`);
       if (response.ok) {
         const data = await response.json();
         setProfile(data);
@@ -49,7 +49,7 @@ const fetchUserPosts = async () => {
       headers['Authorization'] = `Bearer ${token}`;
     }
     
-    const response = await fetch(`urwall-production-7ba9.up.railway.app/api/users/${userId}/posts`, {
+    const response = await fetch(`https://urwall-production-7ba9.up.railway.app/api/users/${userId}/posts`, {
       headers: headers
     });
     
@@ -66,7 +66,7 @@ const fetchUserPosts = async () => {
     e.preventDefault();
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`urwall-production-7ba9.up.railway.app/api/users/${userId}`, {
+      const response = await fetch(`https://urwall-production-7ba9.up.railway.app/api/users/${userId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

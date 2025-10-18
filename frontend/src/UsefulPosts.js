@@ -1,61 +1,50 @@
 import React, { useState, useEffect } from 'react';
-import './UserProfile.css';
+import './UsefulPosts.css';
 
-export default function UserProfile({ userId, currentUser, onBack, onPostClick }) {
-  const [profile, setProfile] = useState(null);
+export default function UsefulPosts({ user, onPostClick, onBack }) {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('posts');
-  const [isEditing, setIsEditing] = useState(false);
-  const [editForm, setEditForm] = useState({
-    username: '',
-    bio: '',
-    avatar_url: ''
-  });
-  const [editingPostId, setEditingPostId] = useState(null);
-  const [editPostForm, setEditPostForm] = useState({
-    title: '',
-    content: '',
-    category: ''
-  });
-
-  const isOwnProfile = currentUser && currentUser.id === parseInt(userId);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [sortBy, setSortBy] = useState('created_at');
+  
+  // Request transfer modal state
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [userPosts, setUserPosts] = useState([]);
+  const [selectedPostForTransfer, setSelectedPostForTransfer] = useState(null);
+  const [loadingUserPosts, setLoadingUserPosts] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    fetchUserProfile();
-    fetchUserPosts();
-  }, [userId]);
+    fetchUsefulPosts();
+  }, [page, sortBy, searchQuery]);
 
-  const fetchUserProfile = async () => {
+  const fetchUsefulPosts = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const headers = {
-        'Content-Type': 'application/json'
-      };
+      setLoading(true);
+      let url;
       
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+      if (searchQuery.trim()) {
+        // Use search endpoint if there's a search query
+        url = `https://urwall-production-7ba9.up.railway.app/api/useful-posts/search?query=${encodeURIComponent(searchQuery)}&page=${page}&limit=20&sortBy=${sortBy}`;
+      } else {
+        // Use regular endpoint if no search query
+        url = `https://urwall-production-7ba9.up.railway.app/api/useful-posts?page=${page}&limit=20&sortBy=${sortBy}`;
       }
       
-      const response = await fetch(`https://urwall-production-7ba9.up.railway.app/api/users/${userId}`, {
-        method: 'GET',
-        headers: headers
-      });
+      const response = await fetch(url);
       
       if (response.ok) {
         const data = await response.json();
-        console.log('Fetched profile data:', data); // Debug log
-        setProfile(data);
-        setEditForm({
-          username: data.username || '',
-          bio: data.bio || '',
-          avatar_url: data.avatar_url || ''
-        });
+        setPosts(data.posts);
+        setTotalPages(data.totalPages);
       } else {
-        console.error('Failed to fetch user profile');
+        console.error('Failed to fetch useful posts');
+        setPosts([]);
       }
     } catch (error) {
-      console.error('Error fetching user profile:', error);
+      console.error('Error fetching useful posts:', error);
+      setPosts([]);
     } finally {
       setLoading(false);
     }
@@ -63,365 +52,315 @@ export default function UserProfile({ userId, currentUser, onBack, onPostClick }
 
   const fetchUserPosts = async () => {
     try {
+      setLoadingUserPosts(true);
       const token = localStorage.getItem('token');
-      const headers = {};
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-      
-      const response = await fetch(`https://urwall-production-7ba9.up.railway.app/api/users/${userId}/posts`, {
-        headers: headers
-      });
+      const response = await fetch(
+        `https://urwall-production-7ba9.up.railway.app/api/users/${user.id}/posts`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        }
+      );
       
       if (response.ok) {
         const data = await response.json();
-        setPosts(data);
+        setUserPosts(data);
+      } else {
+        console.error('Failed to fetch user posts');
+        setUserPosts([]);
       }
     } catch (error) {
       console.error('Error fetching user posts:', error);
+      setUserPosts([]);
+    } finally {
+      setLoadingUserPosts(false);
     }
   };
 
-  const handleUpdateProfile = async (e) => {
-    e.preventDefault();
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`https://urwall-production-7ba9.up.railway.app/api/users/${userId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(editForm)
-      });
-
-      if (response.ok) {
-        const updatedProfile = await response.json();
-        setProfile(updatedProfile);
-        setIsEditing(false);
-        alert('个人信息更新成功！');
-        // Re-fetch to get email back if viewing own profile
-        fetchUserProfile();
-      } else {
-        alert('更新失败，请重试');
-      }
-    } catch (error) {
-      console.error('Error updating profile:', error);
-      alert('网络错误');
-    }
+  const handleOpenRequestModal = (e) => {
+    e.stopPropagation();
+    setShowRequestModal(true);
+    fetchUserPosts();
   };
 
-  const handleDeletePost = async (postId) => {
-    if (!window.confirm('确定要删除这篇帖子吗？此操作无法撤销。')) {
+  const handleCloseRequestModal = () => {
+    setShowRequestModal(false);
+    setSelectedPostForTransfer(null);
+  };
+
+  const handleRequestTransfer = async () => {
+    if (!selectedPostForTransfer) {
+      alert('Please select a post to transfer');
       return;
     }
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`https://urwall-production-7ba9.up.railway.app/api/posts/${postId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
+      const response = await fetch(
+        `https://urwall-production-7ba9.up.railway.app/api/posts/${selectedPostForTransfer}/request-transfer`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
         }
-      });
+      );
 
       if (response.ok) {
-        alert('帖子删除成功！');
-        fetchUserPosts();
+        alert('Transfer request submitted successfully! It will be reviewed by a manager.');
+        handleCloseRequestModal();
       } else {
         const error = await response.json();
-        alert(error.message || '删除失败');
+        alert(error.message || 'Failed to submit transfer request');
       }
     } catch (error) {
-      console.error('Error deleting post:', error);
-      alert('网络错误');
+      console.error('Error submitting transfer request:', error);
+      alert('Network error');
     }
   };
 
-  const handleEditPost = (post) => {
-    setEditingPostId(post.id);
-    setEditPostForm({
-      title: post.title,
-      content: post.content,
-      category: post.category
-    });
+  const handleSortChange = (newSort) => {
+    setSortBy(newSort);
+    setPage(1);
   };
 
-  const handleUpdatePost = async (postId) => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`https://urwall-production-7ba9.up.railway.app/api/posts/${postId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(editPostForm)
-      });
-
-      if (response.ok) {
-        alert('帖子更新成功！');
-        setEditingPostId(null);
-        fetchUserPosts();
-      } else {
-        const error = await response.json();
-        alert(error.message || '更新失败');
-      }
-    } catch (error) {
-      console.error('Error updating post:', error);
-      alert('网络错误');
+  const handlePostCardClick = (postId) => {
+    if (onPostClick) {
+      onPostClick(postId);
     }
   };
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     const now = new Date();
-    const diffInSeconds = Math.floor((now - date) / 1000);
+    const diffInMs = now - date;
+    const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
+    const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
 
-    if (diffInSeconds < 60) return '刚刚';
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} 分钟前`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} 小时前`;
-    if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)} 天前`;
-    return date.toLocaleDateString();
-  };
-
-  if (loading) {
-    return <div className="loading">加载中...</div>;
-  }
-
-  if (!profile) {
-    return (
-      <div className="error-container">
-        <div className="error">用户不存在</div>
-        <button onClick={onBack} className="back-btn">← 返回</button>
-      </div>
-    );
-  }
-
-  const renderPost = (post) => {
-    if (editingPostId === post.id) {
-      return (
-        <div key={post.id} className="post-card editing">
-          <div className="edit-post-form">
-            <input
-              type="text"
-              value={editPostForm.title}
-              onChange={(e) => setEditPostForm({...editPostForm, title: e.target.value})}
-              placeholder="标题"
-              className="edit-post-input"
-            />
-            <select
-              value={editPostForm.category}
-              onChange={(e) => setEditPostForm({...editPostForm, category: e.target.value})}
-              className="edit-post-select"
-            >
-              <option value="Academics">Academics</option>
-              <option value="Campus Life">Campus Life</option>
-              <option value="Career">Career</option>
-              <option value="Social">Social</option>
-              <option value="Other">Other</option>
-            </select>
-            <textarea
-              value={editPostForm.content}
-              onChange={(e) => setEditPostForm({...editPostForm, content: e.target.value})}
-              placeholder="内容"
-              className="edit-post-textarea"
-              rows="6"
-            />
-            <div className="edit-post-actions">
-              <button onClick={() => handleUpdatePost(post.id)} className="save-edit-btn">
-                保存
-              </button>
-              <button onClick={() => setEditingPostId(null)} className="cancel-edit-btn">
-                取消
-              </button>
-            </div>
-          </div>
-        </div>
-      );
+    if (diffInHours < 1) {
+      return 'Just now';
+    } else if (diffInHours < 24) {
+      return `${diffInHours} hours ago`;
+    } else if (diffInDays < 7) {
+      return `${diffInDays} days ago`;
+    } else {
+      return date.toLocaleDateString();
     }
+  };
 
+  if (loading && posts.length === 0) {
     return (
-      <div key={post.id} className="post-card">
-        <div className="post-content" onClick={() => onPostClick(post.id)}>
-          <div className="post-header">
-            <span className="post-category">{post.category}</span>
-            {post.is_anonymous && <span className="anonymous-badge">匿名发布</span>}
-            <span className="post-time">{formatDate(post.created_at)}</span>
-          </div>
-          <h3 className="post-title">{post.title}</h3>
-          <p className="post-preview">{post.content}</p>
-          <div className="post-stats">
-            <span>❤️ {post.likes_count}</span>
-            <span>💬 {post.comments_count}</span>
-          </div>
+      <div className="useful-posts-container">
+        <div className="useful-posts-header">
+          <button onClick={onBack} className="back-btn">← Back</button>
+          <h1>干货板块 - Useful Posts</h1>
+          <p className="useful-posts-description">
+            Curated posts about housing, course selection, and campus life
+          </p>
         </div>
-        {isOwnProfile && (
-          <div className="post-actions">
-            <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                handleEditPost(post);
-              }} 
-              className="edit-post-btn"
-            >
-              ✏️ 编辑
-            </button>
-            <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDeletePost(post.id);
-              }} 
-              className="delete-post-btn"
-            >
-              🗑️ 删除
-            </button>
-          </div>
-        )}
+        <div className="loading">Loading useful posts...</div>
       </div>
     );
-  };
+  }
 
   return (
-    <div className="user-profile-container">
-      <button onClick={onBack} className="back-btn">← 返回首页</button>
+    <div className="useful-posts-container">
+      <div className="useful-posts-header">
+        <button onClick={onBack} className="back-btn">← Back</button>
+        <h1>干货板块 - Useful Posts</h1>
+        <p className="useful-posts-description">
+          Curated posts about housing, course selection, and campus life
+        </p>
+        <button onClick={handleOpenRequestModal} className="request-transfer-btn">
+          📤 Request to Add Your Post
+        </button>
+      </div>
 
-      <div className="profile-header">
-        <div className="profile-info">
-          <div className="avatar-container">
-            {profile.avatar_url ? (
-              <img 
-                src={profile.avatar_url} 
-                alt={profile.username} 
-                className="profile-avatar"
-                onError={(e) => { 
-                  e.target.src = 'https://via.placeholder.com/150?text=' + profile.username[0].toUpperCase(); 
-                }}
-              />
-            ) : (
-              <div className="avatar-placeholder">
-                {profile.username[0].toUpperCase()}
-              </div>
+      <div className="useful-posts-controls">
+        <div className="search-and-sort">
+          <div className="search-box-useful">
+            <input
+              type="text"
+              placeholder="Search useful posts..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setPage(1); // Reset to page 1 when searching
+              }}
+              className="search-input-useful"
+            />
+            {searchQuery && (
+              <button 
+                onClick={() => {
+                  setSearchQuery('');
+                  setPage(1);
+                }} 
+                className="clear-search-btn-useful"
+                title="Clear search"
+              >
+                ✕
+              </button>
             )}
           </div>
           
-          <div className="profile-details">
-            <h1>{profile.username}</h1>
-            {profile.email && (
-              <p className="profile-email">{profile.email}</p>
-            )}
-            <p className="profile-bio">{profile.bio || '这个用户还没有填写简介'}</p>
-            <p className="member-since">加入时间: {new Date(profile.created_at).toLocaleDateString()}</p>
-            
-            {isOwnProfile && !isEditing && (
-              <button onClick={() => setIsEditing(true)} className="edit-btn">
-                编辑个人信息
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="profile-stats">
-          <div className="stat-item">
-            <span className="stat-number">{posts.length}</span>
-            <span className="stat-label">帖子</span>
-          </div>
-          <div className="stat-item">
-            <span className="stat-number">{profile.total_likes || 0}</span>
-            <span className="stat-label">获赞</span>
-          </div>
-          <div className="stat-item">
-            <span className="stat-number">{profile.total_comments || 0}</span>
-            <span className="stat-label">评论</span>
+          <div className="sort-buttons">
+            <button
+              onClick={() => handleSortChange('created_at')}
+              className={`sort-btn ${sortBy === 'created_at' ? 'active' : ''}`}
+            >
+              Latest
+            </button>
+            <button
+              onClick={() => handleSortChange('likes')}
+              className={`sort-btn ${sortBy === 'likes' ? 'active' : ''}`}
+            >
+              Most Liked
+            </button>
+            <button
+              onClick={() => handleSortChange('comments')}
+              className={`sort-btn ${sortBy === 'comments' ? 'active' : ''}`}
+            >
+              Most Discussed
+            </button>
           </div>
         </div>
       </div>
 
-      {isEditing && (
-        <div className="edit-form-container">
-          <h2>编辑个人信息</h2>
-          <form onSubmit={handleUpdateProfile} className="edit-form">
-            <div className="form-group">
-              <label>用户名</label>
-              <input
-                type="text"
-                value={editForm.username}
-                onChange={(e) => setEditForm({...editForm, username: e.target.value})}
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label>个人简介</label>
-              <textarea
-                value={editForm.bio}
-                onChange={(e) => setEditForm({...editForm, bio: e.target.value})}
-                placeholder="介绍一下自己..."
-                rows="4"
-              />
-            </div>
-            <div className="form-group">
-              <label>头像 URL</label>
-              <input
-                type="url"
-                value={editForm.avatar_url}
-                onChange={(e) => setEditForm({...editForm, avatar_url: e.target.value})}
-                placeholder="https://example.com/avatar.jpg"
-              />
-            </div>
-            <div className="form-actions">
-              <button type="button" onClick={() => setIsEditing(false)} className="cancel-btn">
-                取消
-              </button>
-              <button type="submit" className="save-btn">
-                保存
-              </button>
-            </div>
-          </form>
+      {posts.length === 0 ? (
+        <div className="no-posts">
+          <p>No useful posts yet. Posts will appear here once approved by managers.</p>
         </div>
+      ) : (
+        <>
+          <div className="useful-posts-list">
+            {posts.map((post) => (
+              <div
+                key={post.id}
+                className="useful-post-card"
+                onClick={() => handlePostCardClick(post.id)}
+              >
+                <div className="post-header">
+                  <span className="post-category">{post.category}</span>
+                  {post.is_anonymous && (
+                    <span className="anonymous-badge">Anonymous</span>
+                  )}
+                  <span className="post-time">{formatDate(post.approved_at)}</span>
+                </div>
+
+                <h3 className="post-title">{post.title}</h3>
+
+                <div className="post-preview">
+                  {post.content.substring(0, 200)}
+                  {post.content.length > 200 && '...'}
+                </div>
+
+                <div className="post-meta">
+                  <span className="post-author">
+                    {post.is_anonymous ? 'Anonymous' : post.author}
+                  </span>
+                  <div className="post-stats">
+                    <span>👍 {post.likes_count}</span>
+                    <span>💬 {post.comments_count}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {totalPages > 1 && (
+            <div className="pagination">
+              <button
+                onClick={() => setPage(page - 1)}
+                disabled={page === 1}
+                className="pagination-btn"
+              >
+                ← Previous
+              </button>
+              <span className="page-info">
+                Page {page} of {totalPages}
+              </span>
+              <button
+                onClick={() => setPage(page + 1)}
+                disabled={page === totalPages}
+                className="pagination-btn"
+              >
+                Next →
+              </button>
+            </div>
+          )}
+        </>
       )}
 
-      <div className="profile-content">
-        <div className="content-tabs">
-          <button 
-            className={activeTab === 'posts' ? 'tab active' : 'tab'}
-            onClick={() => setActiveTab('posts')}
-          >
-            发布的帖子
-          </button>
-          <button 
-            className={activeTab === 'anonymous' ? 'tab active' : 'tab'}
-            onClick={() => setActiveTab('anonymous')}
-          >
-            匿名帖子
-          </button>
+      {/* Request Transfer Modal */}
+      {showRequestModal && (
+        <div className="modal-overlay" onClick={handleCloseRequestModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2>Request to Add Post to Useful Section</h2>
+            <p className="modal-description">
+              Select one of your posts to request it be added to the Useful Posts section. 
+              A manager will review your request.
+            </p>
+
+            {loadingUserPosts ? (
+              <div className="modal-loading">Loading your posts...</div>
+            ) : userPosts.length === 0 ? (
+              <div className="no-user-posts">
+                <p>You don't have any posts yet. Create a post first to request a transfer!</p>
+              </div>
+            ) : (
+              <div className="user-posts-list">
+                {userPosts.map((post) => (
+                  <div
+                    key={post.id}
+                    className={`user-post-item ${selectedPostForTransfer === post.id ? 'selected' : ''}`}
+                    onClick={() => setSelectedPostForTransfer(post.id)}
+                  >
+                    <div className="post-select-indicator">
+                      <input
+                        type="radio"
+                        checked={selectedPostForTransfer === post.id}
+                        onChange={() => setSelectedPostForTransfer(post.id)}
+                      />
+                    </div>
+                    <div className="post-select-content">
+                      <div className="post-select-header">
+                        <span className="post-category">{post.category}</span>
+                        {post.is_anonymous && (
+                          <span className="anonymous-badge">Anonymous</span>
+                        )}
+                      </div>
+                      <h4 className="post-select-title">{post.title}</h4>
+                      <p className="post-select-preview">
+                        {post.content.substring(0, 100)}
+                        {post.content.length > 100 && '...'}
+                      </p>
+                      <div className="post-select-stats">
+                        <span>👍 {post.likes_count}</span>
+                        <span>💬 {post.comments_count}</span>
+                        <span className="post-date">{formatDate(post.created_at)}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="modal-actions">
+              <button
+                onClick={handleRequestTransfer}
+                disabled={!selectedPostForTransfer}
+                className="submit-request-btn"
+              >
+                Submit Request
+              </button>
+              <button onClick={handleCloseRequestModal} className="cancel-btn">
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
-
-        <div className="posts-list">
-          {activeTab === 'posts' && (
-            <>
-              {posts.filter(p => !p.is_anonymous).length === 0 ? (
-                <div className="no-posts">还没有发布任何帖子</div>
-              ) : (
-                posts.filter(p => !p.is_anonymous).map(post => renderPost(post))
-              )}
-            </>
-          )}
-
-          {activeTab === 'anonymous' && isOwnProfile && (
-            <>
-              {posts.filter(p => p.is_anonymous).length === 0 ? (
-                <div className="no-posts">没有匿名帖子</div>
-              ) : (
-                posts.filter(p => p.is_anonymous).map(post => renderPost(post))
-              )}
-            </>
-          )}
-
-          {activeTab === 'anonymous' && !isOwnProfile && (
-            <div className="no-posts">只有自己可以查看匿名帖子</div>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 }

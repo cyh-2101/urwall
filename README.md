@@ -29,6 +29,15 @@ Core features:
 - Email-based verification
 - JWT-based authentication
 - Simple, extensible backend design
+  <img width="1717" height="1507" alt="image" src="https://github.com/user-attachments/assets/dbb0af6e-83f3-47e1-b9cd-01a76f752092" />
+  <img width="3054" height="1789" alt="image" src="https://github.com/user-attachments/assets/b6121c0f-4e28-4d6a-ad74-915995777a9c" />
+  <img width="2953" height="1772" alt="image" src="https://github.com/user-attachments/assets/53cb1c46-7d6f-43a2-a25d-64e55590b6fb" />
+  <img width="3044" height="1815" alt="image" src="https://github.com/user-attachments/assets/c5eb2780-a2f4-4932-ab3e-e58a039d236c" />
+
+Note that for testing purposes, this site includes Chinese character,  因为我是中国人
+
+
+
 
 ---
 
